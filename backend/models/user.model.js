@@ -21,6 +21,9 @@ const userSchema = new mongoose.Schema({
     resume: {
         type: String
     },
+    avatar: {
+        type: String
+    },
     refreshToken: {
         type: String,
     }
