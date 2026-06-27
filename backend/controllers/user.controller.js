@@ -2,6 +2,36 @@ import { User } from '../models/user.model.js'
 import { hashingPassword } from '../utils/bcrypt.js'
 import { uploadImageOnCloudinary } from '../utils/cloudinary.js'
 import { deleteFile } from '../utils/filehandler.js'
+import { verifyPassword } from '../utils/bcrypt.js'
+import bcrypt from 'bcrypt' 
+
+const genratingTheAccessTokenAndRefreshToken = async (id) =>{
+   
+    try {
+        const user = await User.findById(id)
+
+        if(!user){
+            throw new Error("User not found for token generation");
+        }
+    
+        const refreshToken = await user.getRefresehToken()
+        const accessToken = await user.getAccessToken()
+
+        user.refreshToken = refreshToken
+        user.save({validateBeforeSave : true})
+    
+        return {
+            refreshToken , accessToken
+        }
+    } catch (error) {
+        
+        console.log("the error at the time of genratingTheAccessTokenAndRefreshToken : " , error)
+    }
+
+}
+
+// this is the registeration route
+// http://localhost:8000/api/user/register
 const register = async (req, res) => {
     try {
         const body = req.body
@@ -29,6 +59,7 @@ const register = async (req, res) => {
             })
         }
 
+        // uploading the image on cloudinary
         const uploadAvatar = await uploadImageOnCloudinary(avatarPath, `${userName}avatar`)
 
         if (!uploadAvatar) {
@@ -37,6 +68,7 @@ const register = async (req, res) => {
             })
         }
 
+        // hashing Password
         const hashedPassword = await hashingPassword(password)
 
         const user = await User.create({
@@ -54,8 +86,8 @@ const register = async (req, res) => {
             })
         }
 
+        // cleaning the uploaded image from the public folder
         const deletingUplaodedFileFromThePublicFolder = await deleteFile(avatarPath)
-
 
         return res.status(201).json({
             message: "registered successful",
@@ -71,6 +103,61 @@ const register = async (req, res) => {
 
 }
 
+
+// this is the login route
+const login = async (req ,res) => {
+    
+    try {
+        const {userName , password} = req.body
+
+        if([userName , password].some((e )=> e?.trim ==="" )){
+            return res.status(401).json({
+                message : "all the fields are required"
+            })
+        }
+
+       const user = await User.findOne({userName:userName})
+
+       if(!user){
+         return res.status(401).json({
+                message : "user not found , try to register again"
+            })
+       }
+       
+      const isPasswordVerifyed = await verifyPassword(password , user.password )
+
+      if(!isPasswordVerifyed){
+         return res.status(401).json({
+                message : "password is wrong"
+            })
+      }
+
+      const {accessToken , refreshToken} = await genratingTheAccessTokenAndRefreshToken(user._id)
+      
+      const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+      const option = {
+        httpOnly  : true,
+        secure: false,
+        sameSite: "none"
+      }
+
+       return res.status(201)
+       .cookie('refreshToken',refreshToken)
+       .cookie('accessToken',accessToken)
+       .json({
+        message : "login done",
+        user : loggedInUser
+       })
+
+
+    } catch (error) {
+        console.log('the error at the time of login ' , error)
+        return res.status(500)
+    }
+}
+
 export {
-    register
+    register,
+    login
 }

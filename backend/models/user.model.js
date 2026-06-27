@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema({
     }
 }, { timestamps: true })
 
-userSchema.methods.getRefresehToken = () => {
+userSchema.methods.getRefresehToken =function(){
     return jwt.sign({
         _id: this._id,
         userName: this.userName
@@ -37,7 +37,7 @@ userSchema.methods.getRefresehToken = () => {
         expiresIn: "10d"
     })
 }
-userSchema.methods.getAccessToken = () => {
+userSchema.methods.getAccessToken = function(){
     return jwt.sign({
         _id: this._id,
         userName: this.userName
