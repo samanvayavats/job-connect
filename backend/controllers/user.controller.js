@@ -18,7 +18,7 @@ const genratingTheAccessTokenAndRefreshToken = async (id) => {
         const accessToken = await user.getAccessToken();
 
         user.refreshToken = refreshToken;
-        user.save({ validateBeforeSave: true });
+        await user.save({ validateBeforeSave: true });
 
         return {
             refreshToken,
@@ -207,6 +207,46 @@ const generateAccessToken = async (req, res) => {
 };
 
 // upload the summarry and resume
+const uploadResume = async (req, res) => {
+    try {
+        const resume = req.file.path;
 
+        if (!resume) {
+            return res.status(401).json({
+                message: 'resume is required'
+            });
+        }
 
-export { register, login, generateAccessToken };
+        const uploadResume = await uploadImageOnCloudinary(resume, `${req.user.userName}resume`);
+
+        if (!uploadResume) {
+            return res.status(500).json({
+                message: 'resume upload failed'
+            });
+        }
+
+        const user = await User.findById(req.user._id);
+
+        user.resume = uploadResume.secure_url;
+        await user.save({ validateBeforeSave: true });
+
+        const userAfterSavingResume = await User.findById(req.user._id).select(
+            '-password -refreshToken'
+        );
+
+        const resumeDeletedFromPublic = await deleteFile(resume);
+
+        return res.status(200).json({
+            user: userAfterSavingResume,
+            message: 'resume uploaded successfully'
+        });
+    } catch (error) {
+        console.log('resume upload failed', error);
+
+        return res.status(500).json({
+            message: 'resume upload failed'
+        });
+    }
+};
+
+export { register, login, generateAccessToken, uploadResume };
