@@ -206,7 +206,7 @@ const generateAccessToken = async (req, res) => {
     }
 };
 
-// upload the summarry and resume
+// upload the resume
 const uploadResume = async (req, res) => {
     try {
         const resume = req.file.path;
@@ -226,6 +226,12 @@ const uploadResume = async (req, res) => {
         }
 
         const user = await User.findById(req.user._id);
+
+        if (!user) {
+            return res.status(404).json({
+                message: 'user not found '
+            });
+        }
 
         user.resume = uploadResume.secure_url;
         await user.save({ validateBeforeSave: true });
@@ -249,4 +255,42 @@ const uploadResume = async (req, res) => {
     }
 };
 
-export { register, login, generateAccessToken, uploadResume };
+// update summary
+const updateSummary = async (req, res) => {
+    try {
+        const summary = req.body.summary;
+
+        if (!summary) {
+            return res.status(404).json({
+                message: 'summary can not be empty'
+            });
+        }
+
+        const user = await User.findById(req?.user?._id);
+
+        if (!user) {
+            return res.status(404).json({
+                message: 'user not found '
+            });
+        }
+        user.summary = summary;
+        await user.save({ validateBeforeSave: true });
+
+        const userAfterUpdate = await User.findById(req.user._id).select(
+            ' -password -refreshToken'
+        );
+
+        return res.status(200).json({
+            user: userAfterUpdate,
+            message: 'summary updated successfully'
+        });
+    } catch (error) {
+        console.log('the error at the time of updating summary', error);
+
+        return res.status(500).json({
+            message: 'the summary update failed'
+        });
+    }
+};
+
+export { register, login, generateAccessToken, uploadResume, updateSummary };
