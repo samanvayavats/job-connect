@@ -3,29 +3,30 @@ import { hashingPassword } from '../utils/bcrypt.js'
 import { uploadImageOnCloudinary } from '../utils/cloudinary.js'
 import { deleteFile } from '../utils/filehandler.js'
 import { verifyPassword } from '../utils/bcrypt.js'
-import bcrypt from 'bcrypt' 
+import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
 
-const genratingTheAccessTokenAndRefreshToken = async (id) =>{
-   
+const genratingTheAccessTokenAndRefreshToken = async (id) => {
+
     try {
         const user = await User.findById(id)
 
-        if(!user){
+        if (!user) {
             throw new Error("User not found for token generation");
         }
-    
-        const refreshToken = await user.getRefresehToken()
+
+        const refreshToken = await user.getRefreshToken()
         const accessToken = await user.getAccessToken()
 
         user.refreshToken = refreshToken
-        user.save({validateBeforeSave : true})
-    
+        user.save({ validateBeforeSave: true })
+
         return {
-            refreshToken , accessToken
+            refreshToken, accessToken
         }
     } catch (error) {
-        
-        console.log("the error at the time of genratingTheAccessTokenAndRefreshToken : " , error)
+
+        console.log("the error at the time of genratingTheAccessTokenAndRefreshToken : ", error)
     }
 
 }
@@ -105,59 +106,124 @@ const register = async (req, res) => {
 
 
 // this is the login route
-const login = async (req ,res) => {
-    
-    try {
-        const {userName , password} = req.body
+const login = async (req, res) => {
 
-        if([userName , password].some((e )=> e?.trim ==="" )){
+    try {
+        const { userName, password } = req.body
+
+        if ([userName, password].some((e) => e?.trim === "")) {
             return res.status(401).json({
-                message : "all the fields are required"
+                message: "all the fields are required"
             })
         }
 
-       const user = await User.findOne({userName:userName})
+        const user = await User.findOne({ userName: userName })
 
-       if(!user){
-         return res.status(401).json({
-                message : "user not found , try to register again"
+        if (!user) {
+            return res.status(401).json({
+                message: "user not found , try to register again"
             })
-       }
-       
-      const isPasswordVerifyed = await verifyPassword(password , user.password )
+        }
 
-      if(!isPasswordVerifyed){
-         return res.status(401).json({
-                message : "password is wrong"
+        const isPasswordVerifyed = await verifyPassword(password, user.password)
+
+        if (!isPasswordVerifyed) {
+            return res.status(401).json({
+                message: "password is wrong"
             })
-      }
+        }
 
-      const {accessToken , refreshToken} = await genratingTheAccessTokenAndRefreshToken(user._id)
-      
-      const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+        const { accessToken, refreshToken } = await genratingTheAccessTokenAndRefreshToken(user._id)
 
-      const option = {
-        httpOnly  : true,
-        secure: false,
-        sameSite: "none"
-      }
+        const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
 
-       return res.status(201)
-       .cookie('refreshToken',refreshToken)
-       .cookie('accessToken',accessToken)
-       .json({
-        message : "login done",
-        user : loggedInUser
-       })
+        const option = {
+            httpOnly: true,
+            secure: false,
+            sameSite: "none"
+        }
+
+        return res.status(201)
+            .cookie('refreshToken', refreshToken)
+            .cookie('accessToken', accessToken)
+            .json({
+                message: "login done",
+                user: loggedInUser
+            })
 
 
     } catch (error) {
-        console.log('the error at the time of login ' , error)
+        console.log('the error at the time of login ', error)
         return res.status(500)
     }
 }
 
+
+const generateAccessToken = async (req, res) => {
+    try {
+        const refreshToken = req.cookies?.refreshToken;
+
+        if (!refreshToken) {
+            return res.status(401).json({
+                message: "Refresh token not found. Please login again."
+            });
+        }
+
+
+        const decoded = jwt.verify(
+            refreshToken,
+            process.env.refresh_token_secret
+        );
+
+
+        const user = await User.findById(decoded._id);
+
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found."
+            });
+        }
+
+        if (user.refreshToken !== refreshToken) {
+            return res.status(401).json({
+                message: "Invalid refresh token."
+            });
+        }
+
+        const accessToken = await user.getAccessToken();
+
+        const options = {
+            httpOnly: true,
+            secure: false,
+            sameSite: "none",
+        };
+
+        return res
+            .cookie("accessToken", accessToken, options)
+            .status(200)
+            .json({
+                message: "New access token generated successfully.",
+                accessToken
+            });
+
+    } catch (error) {
+
+        if (error.name === "TokenExpiredError") {
+            return res.status(401).json({
+                error : error.name,
+                message: "Refresh token expired. Please login again."
+            });
+        }
+
+        return res.status(401).json({
+            message: "Invalid refresh token."
+        });
+    }
+};
+
+
 export {
     register,
-    login
+    login,
+    generateAccessToken
 }
