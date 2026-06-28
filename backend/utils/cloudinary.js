@@ -1,6 +1,6 @@
 import { v2 as cloudinary } from 'cloudinary';
 
-const uploadImageOnCloudinary = async (imageUrl, userName) => {
+const uploadImageOnCloudinary = async (fileUrl, userName) => {
     cloudinary.config({
         cloud_name: `${process.env.cloudinary_cloud_name}`,
         api_key: `${process.env.cloudinary_API_key}`,
@@ -8,8 +8,9 @@ const uploadImageOnCloudinary = async (imageUrl, userName) => {
     });
 
     const uploadResult = await cloudinary.uploader
-        .upload(imageUrl, {
-            public_id: `${userName}`
+        .upload(fileUrl, {
+            public_id: `${userName}`,
+            resource_type: 'raw'
         })
         .catch((error) => {
             console.log(error);
