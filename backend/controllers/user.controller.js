@@ -1,6 +1,6 @@
 import { User } from '../models/user.model.js';
 import { hashingPassword } from '../utils/bcrypt.js';
-import { uploadImageOnCloudinary } from '../utils/cloudinary.js';
+import {deleteFromcloudinary, uploadFileOnCloudinary} from '../utils/cloudinary.js';
 import { deleteFile } from '../utils/filehandler.js';
 import { verifyPassword } from '../utils/bcrypt.js';
 import bcrypt from 'bcrypt';
@@ -33,88 +33,86 @@ const genratingTheAccessTokenAndRefreshToken = async (id) => {
 // http://localhost:8000/api/user/register
 const register = async (req, res) => {
     try {
-        const body = req.body;
+        const { userName, email, password } = req.body;
 
-        const { userName, email, password } = body;
-        const avatarPath = req.files.avatar[0].path;
-        const resumePath = req.files.resume[0].path;
-        // console.log(resumePath , avatarPath)
-
-        if ([userName, email, password].some((e) => e?.trim() === '')) {
-            return res.status(401).json({
-                message: 'all the fields are required'
+        if ([userName, email, password].some((e) => !e?.trim())) {
+            return res.status(400).json({
+                message: "All fields are required",
             });
         }
+
+        const avatarPath = req.files?.avatar?.[0]?.path;
+        const resumePath = req.files?.resume?.[0]?.path;
 
         if (!avatarPath || !resumePath) {
-            return res.status(401).json({
-                message: 'avatar and resume is required'
+            return res.status(400).json({
+                message: "Avatar and Resume are required",
             });
         }
 
-        const isUserExits = await User.findOne({ userName: userName });
+        const existingUser = await User.findOne({
+            $or: [{ userName }, { email }],
+        });
 
-        if (isUserExits) {
+        if (existingUser) {
             return res.status(409).json({
-                message: 'user already exits , try to login '
+                message: "User already exists",
             });
         }
 
-        // uploading the avatar and resume on cloudinary
-        const uploadAvatar = await uploadImageOnCloudinary(
+        // Upload Avatar
+        const uploadAvatar = await uploadFileOnCloudinary(
             avatarPath,
-            `${userName}avatar`,
-            'image'
+            `${userName}-avatar`,
+            "image"
         );
-        const uploadResume = await uploadImageOnCloudinary(resumePath, `${userName}resume`, 'raw');
 
         if (!uploadAvatar) {
-            return res.status(401).json({
-                message: 'avatar upload failed '
+            return res.status(500).json({
+                message: "Avatar upload failed",
             });
         }
 
-        if (!resumePath) {
-            return res.status(401).json({
-                message: 'resume upload failed '
+        // Upload Resume (PDF)
+        const uploadResume = await uploadFileOnCloudinary(
+            resumePath,
+            `${userName}-resume`,
+            "image"
+        );
+
+        if (!uploadResume) {
+            return res.status(500).json({
+                message: "Resume upload failed",
             });
         }
 
-        // hashing Password
         const hashedPassword = await hashingPassword(password);
 
         const user = await User.create({
-            userName: userName,
-            email: email,
+            userName,
+            email,
             password: hashedPassword,
             avatar: uploadAvatar.secure_url,
-            resume: uploadResume.secure_url
+            resume: uploadResume.secure_url,
         });
 
-        const userCreated = await User.findOne(User?._id).select('-password');
+        const createdUser = await User.findById(user._id).select("-password");
 
-        if (!userCreated) {
-            return res.status(500).json({
-                message: 'something went wrong , try to register again'
-            });
-        }
-
-        // cleaning the uploaded image from the public folder
-        const deletingUplaodedAvatarFromThePublicFolder = await deleteFile(avatarPath);
-        const deletingUplaodedResumeFromThePublicFolder = await deleteFile(resumePath);
+        await deleteFile(avatarPath);
+        await deleteFile(resumePath);
 
         return res.status(201).json({
-            message: 'registered successful',
-            user: userCreated
+            message: "Registered successfully",
+            user: createdUser,
         });
     } catch (error) {
-        console.log('error at the time of register ', error);
+        console.log("Register Error:", error);
+
         return res.status(500).json({
-            message: 'something went wrong , try to register again'
+            message: "Something went wrong",
         });
     }
 };
-
 // this is the login route
 const login = async (req, res) => {
     try {
@@ -221,8 +219,8 @@ const generateAccessToken = async (req, res) => {
     }
 };
 
-// upload the resume
-const uploadResume = async (req, res) => {
+// update the resume
+const updateResume = async (req, res) => {
     try {
         const resume = req.file.path;
 
@@ -232,7 +230,8 @@ const uploadResume = async (req, res) => {
             });
         }
 
-        const uploadResume = await uploadImageOnCloudinary(resume, `${req.user.userName}resume`);
+        await deleteFromcloudinary(`${req.user.userName}resume` ,'raw')
+        const uploadResume = await uploadFileOnCloudinary(resume, `${req.user.userName}-resume` ,'image');
 
         if (!uploadResume) {
             return res.status(500).json({
@@ -308,4 +307,6 @@ const updateSummary = async (req, res) => {
     }
 };
 
-export { register, login, generateAccessToken, uploadResume, updateSummary };
+
+
+export { register, login, generateAccessToken, updateResume, updateSummary };
