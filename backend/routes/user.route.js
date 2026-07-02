@@ -5,7 +5,10 @@ import { verifyUser } from '../middleware/authentication.js';
 
 const router = Router();
 
-router.route('/register').post(upload.single('avatar'), register);
+router.route('/register').post( upload.fields([
+    { name: 'avatar', maxCount: 1 },
+    { name: 'resume', maxCount: 1 }
+  ]) , register);
 router.route('/login').post(login);
 router.route('/generate-access-token').post(generateAccessToken);
 router.route('/upload-resume').post(verifyUser ,upload.single('resume'),uploadResume);

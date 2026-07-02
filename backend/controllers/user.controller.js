@@ -36,7 +36,9 @@ const register = async (req, res) => {
         const body = req.body;
 
         const { userName, email, password } = body;
-        const avatarPath = req.file.path;
+        const avatarPath = req.files.avatar[0].path;
+        const resumePath = req.files.resume[0].path;
+        // console.log(resumePath , avatarPath)
 
         if ([userName, email, password].some((e) => e?.trim() === '')) {
             return res.status(401).json({
@@ -44,9 +46,9 @@ const register = async (req, res) => {
             });
         }
 
-        if (!avatarPath) {
+        if (!avatarPath || !resumePath) {
             return res.status(401).json({
-                message: 'avatar is required'
+                message: 'avatar and resume is required'
             });
         }
 
@@ -58,12 +60,23 @@ const register = async (req, res) => {
             });
         }
 
-        // uploading the image on cloudinary
-        const uploadAvatar = await uploadImageOnCloudinary(avatarPath, `${userName}avatar`);
+        // uploading the avatar and resume on cloudinary
+        const uploadAvatar = await uploadImageOnCloudinary(
+            avatarPath,
+            `${userName}avatar`,
+            'image'
+        );
+        const uploadResume = await uploadImageOnCloudinary(resumePath, `${userName}resume`, 'raw');
 
         if (!uploadAvatar) {
             return res.status(401).json({
                 message: 'avatar upload failed '
+            });
+        }
+
+        if (!resumePath) {
+            return res.status(401).json({
+                message: 'resume upload failed '
             });
         }
 
@@ -74,7 +87,8 @@ const register = async (req, res) => {
             userName: userName,
             email: email,
             password: hashedPassword,
-            avatar: uploadAvatar.secure_url
+            avatar: uploadAvatar.secure_url,
+            resume: uploadResume.secure_url
         });
 
         const userCreated = await User.findOne(User?._id).select('-password');
@@ -86,7 +100,8 @@ const register = async (req, res) => {
         }
 
         // cleaning the uploaded image from the public folder
-        const deletingUplaodedFileFromThePublicFolder = await deleteFile(avatarPath);
+        const deletingUplaodedAvatarFromThePublicFolder = await deleteFile(avatarPath);
+        const deletingUplaodedResumeFromThePublicFolder = await deleteFile(resumePath);
 
         return res.status(201).json({
             message: 'registered successful',
