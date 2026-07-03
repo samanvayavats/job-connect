@@ -33,9 +33,9 @@ const genratingTheAccessTokenAndRefreshToken = async (id) => {
 // http://localhost:8000/api/user/register
 const register = async (req, res) => {
     try {
-        const { userName, email, password } = req.body;
+        const { userName, email, password, summary } = req.body;
 
-        if ([userName, email, password].some((e) => !e?.trim())) {
+        if ([userName, email, password, summary].some((e) => !e?.trim())) {
             return res.status(400).json({
                 message: 'All fields are required'
             });
@@ -92,6 +92,7 @@ const register = async (req, res) => {
             userName,
             email,
             password: hashedPassword,
+            summary,
             avatar: uploadAvatar.secure_url,
             resume: uploadResume.secure_url
         });
@@ -230,7 +231,7 @@ const updateResume = async (req, res) => {
             });
         }
 
-        await deleteFromcloudinary(`${req.user.userName}resume`, 'raw');
+        await deleteFromcloudinary(`${req.user.userName}-resume`, 'image');
         const uploadResume = await uploadFileOnCloudinary(
             resume,
             `${req.user.userName}-resume`,
@@ -311,4 +312,57 @@ const updateSummary = async (req, res) => {
     }
 };
 
-export { register, login, generateAccessToken, updateResume, updateSummary };
+const updateAvatar = async (req, res) => {
+    try {
+        const avatar = req.file.path;
+
+        if (!avatar) {
+            return res.status(401).json({
+                message: 'avatar is required'
+            });
+        }
+
+        await deleteFromcloudinary(`${req.user.userName}-avatar`, 'image');
+        const updateAvatar = await uploadFileOnCloudinary(
+            avatar,
+            `${req.user.userName}-avatar`,
+            'image'
+        );
+
+        if (!updateAvatar) {
+            return res.status(500).json({
+                message: 'resume upload failed'
+            });
+        }
+
+        const user = await User.findById(req.user._id);
+
+        if (!user) {
+            return res.status(404).json({
+                message: 'user not found '
+            });
+        }
+
+        user.avatar = updateAvatar.secure_url;
+        await user.save({ validateBeforeSave: true });
+
+        const userAfterSavingAvatar = await User.findById(req.user._id).select(
+            '-password -refreshToken'
+        );
+
+        const avatarDeletedFromPublic = await deleteFile(avatar);
+
+        return res.status(200).json({
+            user: userAfterSavingAvatar,
+            message: 'resume uploaded successfully'
+        });
+    } catch (error) {
+        console.log('resume upload failed', error);
+
+        return res.status(500).json({
+            message: 'resume upload failed'
+        });
+    }
+};
+
+export { register, login, generateAccessToken, updateResume, updateSummary, updateAvatar };
