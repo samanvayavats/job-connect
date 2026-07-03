@@ -8,6 +8,7 @@ import cors from 'cors';
 import express from 'express';
 import connectdb from './utils/db.js';
 import userRouter from './routes/user.route.js';
+import qualificationRouter from './routes/qualification.route.js';
 import cookieParser from 'cookie-parser';
 import { verifyUser } from './middleware/authentication.js';
 const app = express();
@@ -24,6 +25,7 @@ app.get('/', verifyUser, (req, res) => {
 });
 
 app.use('/api/user', userRouter);
+app.use('/api/qualification', qualificationRouter);
 
 // connecting the db
 connectdb().then(() => {
