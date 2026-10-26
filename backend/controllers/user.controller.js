@@ -2,8 +2,6 @@ import { User } from '../models/user.model.js';
 import { Qualification } from '../models/qualification.model.js';
 import { Experience } from '../models/experience.model.js';
 import { uploadFileOnCloudinary } from '../utils/cloudinary.js';
-import { deleteFile } from '../utils/filehandler.js';
-import fs from 'node:fs/promises';
 
 // Synchronize Clerk user profile with MongoDB
 const syncClerkUser = async (req, res) => {
@@ -128,37 +126,35 @@ const updateProfile = async (req, res) => {
     }
 };
 
-// Update Resume via Multer & Cloudinary with Base64 Fallback
+// Update Resume via MemoryStorage, Cloudinary & Data URI Fallback
 const updateResume = async (req, res) => {
     try {
-        const resumePath = req.file?.path;
-
-        if (!resumePath) {
+        if (!req.file) {
             return res.status(400).json({ message: 'Resume file is required' });
         }
 
+        const mimeType = req.file.mimetype || 'application/pdf';
+        const base64Data = req.file.buffer ? req.file.buffer.toString('base64') : null;
+        const dataUri = base64Data ? `data:${mimeType};base64,${base64Data}` : req.file.path;
+
         let resumeUrl = null;
 
-        // Try uploading to Cloudinary with 'auto' resource type
+        // Try uploading to Cloudinary
         const uploadedResume = await uploadFileOnCloudinary(
-            resumePath,
+            dataUri,
             `${req.user.userName || req.user.clerkId || 'user'}-resume-${Date.now()}`,
             'auto'
         );
 
         if (uploadedResume?.secure_url) {
             resumeUrl = uploadedResume.secure_url;
-            await deleteFile(resumePath);
-        } else {
-            // Fallback: convert file to inline Base64 data URI so it works even without Cloudinary keys
-            try {
-                const fileData = await fs.readFile(resumePath);
-                const mimeType = req.file.mimetype || 'application/pdf';
-                resumeUrl = `data:${mimeType};base64,${fileData.toString('base64')}`;
-                await deleteFile(resumePath);
-            } catch (readErr) {
-                resumeUrl = `/public/${req.file.filename}`;
-            }
+        } else if (dataUri) {
+            // Direct Base64 data URI fallback (always works, zero disk needed)
+            resumeUrl = dataUri;
+        }
+
+        if (!resumeUrl) {
+            return res.status(500).json({ message: 'Unable to process resume upload' });
         }
 
         const user = await User.findById(req.user._id);
@@ -176,35 +172,33 @@ const updateResume = async (req, res) => {
     }
 };
 
-// Update Avatar via Multer & Cloudinary with Base64 Fallback
+// Update Avatar via MemoryStorage, Cloudinary & Data URI Fallback
 const updateAvatar = async (req, res) => {
     try {
-        const avatarPath = req.file?.path;
-
-        if (!avatarPath) {
+        if (!req.file) {
             return res.status(400).json({ message: 'Avatar file is required' });
         }
+
+        const mimeType = req.file.mimetype || 'image/png';
+        const base64Data = req.file.buffer ? req.file.buffer.toString('base64') : null;
+        const dataUri = base64Data ? `data:${mimeType};base64,${base64Data}` : req.file.path;
 
         let avatarUrl = null;
 
         const uploadedAvatar = await uploadFileOnCloudinary(
-            avatarPath,
+            dataUri,
             `${req.user.userName || req.user.clerkId || 'user'}-avatar-${Date.now()}`,
             'auto'
         );
 
         if (uploadedAvatar?.secure_url) {
             avatarUrl = uploadedAvatar.secure_url;
-            await deleteFile(avatarPath);
-        } else {
-            try {
-                const fileData = await fs.readFile(avatarPath);
-                const mimeType = req.file.mimetype || 'image/png';
-                avatarUrl = `data:${mimeType};base64,${fileData.toString('base64')}`;
-                await deleteFile(avatarPath);
-            } catch (e) {
-                avatarUrl = `/public/${req.file.filename}`;
-            }
+        } else if (dataUri) {
+            avatarUrl = dataUri;
+        }
+
+        if (!avatarUrl) {
+            return res.status(500).json({ message: 'Unable to process avatar upload' });
         }
 
         const user = await User.findById(req.user._id);

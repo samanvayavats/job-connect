@@ -2,8 +2,6 @@ import { Application } from '../models/application.model.js';
 import { Job } from '../models/job.model.js';
 import { User } from '../models/user.model.js';
 import { uploadFileOnCloudinary } from '../utils/cloudinary.js';
-import { deleteFile } from '../utils/filehandler.js';
-import fs from 'node:fs/promises';
 
 const applyForJob = async (req, res) => {
     try {
@@ -42,27 +40,22 @@ const applyForJob = async (req, res) => {
 
         let resumeUrl = req.user.resume || '';
 
-        // If a new resume file is uploaded
+        // If a new resume file is uploaded into memory
         if (req.file) {
+            const mimeType = req.file.mimetype || 'application/pdf';
+            const base64Data = req.file.buffer ? req.file.buffer.toString('base64') : null;
+            const dataUri = base64Data ? `data:${mimeType};base64,${base64Data}` : req.file.path;
+
             const uploadedResume = await uploadFileOnCloudinary(
-                req.file.path,
+                dataUri,
                 `${req.user.userName || 'applicant'}-${jobId}-resume-${Date.now()}`,
                 'auto'
             );
 
             if (uploadedResume?.secure_url) {
                 resumeUrl = uploadedResume.secure_url;
-                await deleteFile(req.file.path);
-            } else {
-                // Fallback to inline Base64 data URI so it works even if Cloudinary is not configured
-                try {
-                    const fileData = await fs.readFile(req.file.path);
-                    const mimeType = req.file.mimetype || 'application/pdf';
-                    resumeUrl = `data:${mimeType};base64,${fileData.toString('base64')}`;
-                    await deleteFile(req.file.path);
-                } catch (readErr) {
-                    resumeUrl = `/public/${req.file.filename}`;
-                }
+            } else if (dataUri) {
+                resumeUrl = dataUri;
             }
         }
 
