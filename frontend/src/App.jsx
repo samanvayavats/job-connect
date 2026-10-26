@@ -20,7 +20,9 @@ import JobApplicants from './pages/JobApplicants';
 
 import { KeyRound, ExternalLink, ShieldCheck } from 'lucide-react';
 
-const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const CLERK_PUBLISHABLE_KEY =
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
+  import.meta.env.CLERK_PUBLISHABLE_KEY;
 
 function App() {
   if (!CLERK_PUBLISHABLE_KEY || CLERK_PUBLISHABLE_KEY === 'pk_test_sample_key_replace_with_yours') {
