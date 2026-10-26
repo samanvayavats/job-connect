@@ -50,6 +50,21 @@ try {
     console.warn('Clerk middleware initialized in standalone fallback mode:', clerkInitErr.message);
 }
 
+// Root Status Endpoint
+app.get('/', (req, res) => {
+    res.status(200).json({
+        status: 'online',
+        message: 'Job Connect REST API is running successfully',
+        documentation: 'Full-stack job recruitment and ATS portal powered by Express, MongoDB, and Clerk',
+        endpoints: {
+            health: '/api/health',
+            jobs: '/api/job/all',
+            userProfile: '/api/user/me',
+            applications: '/api/application/my-applications'
+        }
+    });
+});
+
 // Health Check
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'healthy', project: 'Job Connect API (Clerk Auth)' });
