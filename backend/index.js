@@ -1,4 +1,6 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config({
     path: '.env'
@@ -79,9 +81,20 @@ app.get('/', (req, res) => {
     });
 });
 
+// Ensure public directory exists for static asset serving
+const publicPath = path.resolve(process.cwd(), 'public');
+if (!fs.existsSync(publicPath)) {
+    fs.mkdirSync(publicPath, { recursive: true });
+}
+
 // Health Check
 app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'healthy', project: 'Job Connect API (Clerk Auth)' });
+    res.status(200).json({
+        status: 'healthy',
+        project: 'Job Connect API (Clerk Auth)',
+        build: 'v1.1.0-memory-storage',
+        storage: 'memoryStorage'
+    });
 });
 
 // Routes
@@ -96,7 +109,7 @@ app.use((err, req, res, next) => {
     console.error('Unhandled server error:', err);
     res.status(500).json({
         message: 'Internal server error',
-        error: process.env.NODE_ENV === 'production' ? null : err.message
+        error: err?.message || 'Server error occurred'
     });
 });
 

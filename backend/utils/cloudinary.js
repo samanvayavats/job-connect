@@ -1,9 +1,9 @@
 import { v2 as cloudinary } from 'cloudinary';
 
 const uploadFileOnCloudinary = async (filePath, publicId, resourceType = 'auto') => {
-    const cloudName = process.env.cloudinary_cloud_name;
-    const apiKey = process.env.cloudinary_API_key;
-    const apiSecret = process.env.cloudinary_API_secret;
+    const cloudName = process.env.cloudinary_cloud_name || process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.cloudinary_API_key || process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.cloudinary_API_secret || process.env.CLOUDINARY_API_SECRET;
 
     if (!cloudName || !apiKey || !apiSecret) {
         console.warn('Cloudinary credentials missing in environment variables. Falling back to local/inline storage.');
@@ -35,9 +35,9 @@ const uploadFileOnCloudinary = async (filePath, publicId, resourceType = 'auto')
 };
 
 const deleteFromcloudinary = async (public_id, resource_type = 'auto') => {
-    const cloudName = process.env.cloudinary_cloud_name;
-    const apiKey = process.env.cloudinary_API_key;
-    const apiSecret = process.env.cloudinary_API_secret;
+    const cloudName = process.env.cloudinary_cloud_name || process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.cloudinary_API_key || process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.cloudinary_API_secret || process.env.CLOUDINARY_API_SECRET;
 
     if (!cloudName || !apiKey || !apiSecret) return;
 
