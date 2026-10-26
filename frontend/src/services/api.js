@@ -40,6 +40,11 @@ api.interceptors.request.use(
       config.headers['x-clerk-user-id'] = clerkUserId;
     }
 
+    const clerkRole = localStorage.getItem('clerk_selected_role');
+    if (clerkRole) {
+      config.headers['x-clerk-user-role'] = clerkRole;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
