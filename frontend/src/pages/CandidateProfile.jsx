@@ -111,7 +111,8 @@ const CandidateProfile = () => {
       await refreshUser();
       setProfileMsg({ type: 'success', text: 'Profile avatar updated!' });
     } catch (err) {
-      setProfileMsg({ type: 'error', text: 'Avatar upload failed' });
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Avatar upload failed';
+      setProfileMsg({ type: 'error', text: errMsg });
     } finally {
       setUploadingAvatar(false);
     }
@@ -132,7 +133,8 @@ const CandidateProfile = () => {
       await refreshUser();
       setProfileMsg({ type: 'success', text: 'Resume updated successfully!' });
     } catch (err) {
-      setProfileMsg({ type: 'error', text: 'Resume upload failed' });
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Resume upload failed';
+      setProfileMsg({ type: 'error', text: errMsg });
     } finally {
       setUploadingResume(false);
     }
