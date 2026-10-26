@@ -12,6 +12,19 @@ const userSchema = new mongoose.Schema(
             type: String,
             lowercase: true
         },
+        fullName: {
+            type: String,
+            default: ''
+        },
+        role: {
+            type: String,
+            enum: ['job_seeker', 'recruiter'],
+            default: 'job_seeker'
+        },
+        phoneNumber: {
+            type: String,
+            default: ''
+        },
         password: {
             type: String,
             required: true

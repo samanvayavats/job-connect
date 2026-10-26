@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import {
-    login,
     register,
+    login,
+    getCurrentUser,
+    updateProfile,
+    clerkSync,
+    logout,
     generateAccessToken,
     updateResume,
     updateSummary,
@@ -20,6 +24,10 @@ router.route('/register').post(
     register
 );
 router.route('/login').post(login);
+router.route('/me').get(verifyUser, getCurrentUser);
+router.route('/update-profile').put(verifyUser, updateProfile);
+router.route('/clerk-sync').post(clerkSync);
+router.route('/logout').post(verifyUser, logout);
 router.route('/generate-access-token').post(generateAccessToken);
 router.route('/update-resume').post(verifyUser, upload.single('resume'), updateResume);
 router.route('/update-summary').post(verifyUser, updateSummary);

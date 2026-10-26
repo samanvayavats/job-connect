@@ -1,368 +1,467 @@
 import { User } from '../models/user.model.js';
-import { hashingPassword } from '../utils/bcrypt.js';
+import { Qualification } from '../models/qualification.model.js';
+import { Experience } from '../models/experience.model.js';
+import { hashingPassword, verifyPassword } from '../utils/bcrypt.js';
 import { deleteFromcloudinary, uploadFileOnCloudinary } from '../utils/cloudinary.js';
 import { deleteFile } from '../utils/filehandler.js';
-import { verifyPassword } from '../utils/bcrypt.js';
-import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
-const genratingTheAccessTokenAndRefreshToken = async (id) => {
+const generatingTokens = async (user) => {
     try {
-        const user = await User.findById(id);
-
-        if (!user) {
-            throw new Error('User not found for token generation');
-        }
-
-        const refreshToken = await user.getRefreshToken();
-        const accessToken = await user.getAccessToken();
+        const refreshToken = user.getRefreshToken();
+        const accessToken = user.getAccessToken();
 
         user.refreshToken = refreshToken;
-        await user.save({ validateBeforeSave: true });
+        await user.save({ validateBeforeSave: false });
 
-        return {
-            refreshToken,
-            accessToken
-        };
+        return { refreshToken, accessToken };
     } catch (error) {
-        console.log('the error at the time of genratingTheAccessTokenAndRefreshToken : ', error);
+        console.error('Error generating tokens:', error);
+        throw error;
     }
 };
 
-// this is the registeration route
-// http://localhost:8000/api/user/register
+const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+};
+
+// User Registration
 const register = async (req, res) => {
     try {
-        const { userName, email, password, summary } = req.body;
+        const {
+            userName,
+            email,
+            password,
+            fullName = '',
+            phoneNumber = '',
+            role = 'job_seeker',
+            summary = ''
+        } = req.body;
 
-        if ([userName, email, password, summary].some((e) => !e?.trim())) {
+        if (!userName?.trim() || !password?.trim()) {
             return res.status(400).json({
-                message: 'All fields are required'
+                message: 'Username and password are required'
             });
         }
 
-        const avatarPath = req.files?.avatar?.[0]?.path;
-        const resumePath = req.files?.resume?.[0]?.path;
-
-        if (!avatarPath || !resumePath) {
-            return res.status(400).json({
-                message: 'Avatar and Resume are required'
-            });
-        }
+        const normalizedEmail = email?.trim()?.toLowerCase() || `${userName.trim().toLowerCase()}@jobconnect.local`;
 
         const existingUser = await User.findOne({
-            $or: [{ userName }, { email }]
+            $or: [{ userName: userName.trim().toLowerCase() }, { email: normalizedEmail }]
         });
 
         if (existingUser) {
             return res.status(409).json({
-                message: 'User already exists'
+                message: 'Username or email already in use'
             });
         }
 
-        // Upload Avatar
-        const uploadAvatar = await uploadFileOnCloudinary(
-            avatarPath,
-            `${userName}-avatar`,
-            'image'
-        );
+        let avatarUrl = '';
+        let resumeUrl = '';
 
-        if (!uploadAvatar) {
-            return res.status(500).json({
-                message: 'Avatar upload failed'
-            });
+        const avatarPath = req.files?.avatar?.[0]?.path;
+        const resumePath = req.files?.resume?.[0]?.path;
+
+        if (avatarPath) {
+            try {
+                const uploadAvatar = await uploadFileOnCloudinary(
+                    avatarPath,
+                    `${userName.trim()}-avatar`,
+                    'image'
+                );
+                if (uploadAvatar?.secure_url) {
+                    avatarUrl = uploadAvatar.secure_url;
+                }
+            } catch (err) {
+                console.warn('Avatar upload to Cloudinary failed:', err.message);
+            } finally {
+                await deleteFile(avatarPath);
+            }
         }
 
-        // Upload Resume (PDF)
-        const uploadResume = await uploadFileOnCloudinary(
-            resumePath,
-            `${userName}-resume`,
-            'image'
-        );
-
-        if (!uploadResume) {
-            return res.status(500).json({
-                message: 'Resume upload failed'
-            });
+        if (resumePath) {
+            try {
+                const uploadResume = await uploadFileOnCloudinary(
+                    resumePath,
+                    `${userName.trim()}-resume`,
+                    'image'
+                );
+                if (uploadResume?.secure_url) {
+                    resumeUrl = uploadResume.secure_url;
+                }
+            } catch (err) {
+                console.warn('Resume upload to Cloudinary failed:', err.message);
+            } finally {
+                await deleteFile(resumePath);
+            }
         }
 
         const hashedPassword = await hashingPassword(password);
 
-        const user = await User.create({
-            userName,
-            email,
+        const newUser = await User.create({
+            userName: userName.trim().toLowerCase(),
+            email: normalizedEmail,
+            fullName: fullName.trim(),
+            phoneNumber: phoneNumber.trim(),
+            role: role === 'recruiter' ? 'recruiter' : 'job_seeker',
             password: hashedPassword,
-            summary,
-            avatar: uploadAvatar.secure_url,
-            resume: uploadResume.secure_url
+            summary: summary.trim(),
+            avatar: avatarUrl,
+            resume: resumeUrl
         });
 
-        const createdUser = await User.findById(user._id).select('-password');
+        const { accessToken, refreshToken } = await generatingTokens(newUser);
 
-        await deleteFile(avatarPath);
-        await deleteFile(resumePath);
-
-        return res.status(201).json({
-            message: 'Registered successfully',
-            user: createdUser
-        });
-    } catch (error) {
-        console.log('Register Error:', error);
-
-        return res.status(500).json({
-            message: 'Something went wrong'
-        });
-    }
-};
-// this is the login route
-const login = async (req, res) => {
-    try {
-        const { userName, password } = req.body;
-
-        if ([userName, password].some((e) => e?.trim === '')) {
-            return res.status(401).json({
-                message: 'all the fields are required'
-            });
-        }
-
-        const user = await User.findOne({ userName: userName });
-
-        if (!user) {
-            return res.status(401).json({
-                message: 'user not found , try to register again'
-            });
-        }
-
-        const isPasswordVerifyed = await verifyPassword(password, user.password);
-
-        if (!isPasswordVerifyed) {
-            return res.status(401).json({
-                message: 'password is wrong'
-            });
-        }
-
-        const { accessToken, refreshToken } = await genratingTheAccessTokenAndRefreshToken(
-            user._id
-        );
-
-        const loggedInUser = await User.findById(user._id).select('-password -refreshToken');
-
-        const option = {
-            httpOnly: true,
-            secure: false,
-            sameSite: 'none'
-        };
+        const createdUser = await User.findById(newUser._id).select('-password -refreshToken');
 
         return res
             .status(201)
-            .cookie('refreshToken', refreshToken)
-            .cookie('accessToken', accessToken)
+            .cookie('refreshToken', refreshToken, cookieOptions)
+            .cookie('accessToken', accessToken, cookieOptions)
             .json({
-                message: 'login done',
-                user: loggedInUser
+                message: 'Registration successful',
+                accessToken,
+                user: createdUser
             });
     } catch (error) {
-        console.log('the error at the time of login ', error);
-        return res.status(500);
+        console.error('Register Error:', error);
+        return res.status(500).json({
+            message: 'Registration failed',
+            error: error.message
+        });
     }
 };
 
-// generateAccessToken
+// User Login
+const login = async (req, res) => {
+    try {
+        const { userName, email, password } = req.body;
+        const identifier = (userName || email || '').trim().toLowerCase();
+
+        if (!identifier || !password?.trim()) {
+            return res.status(400).json({
+                message: 'Username/email and password are required'
+            });
+        }
+
+        const user = await User.findOne({
+            $or: [{ userName: identifier }, { email: identifier }]
+        });
+
+        if (!user) {
+            return res.status(401).json({
+                message: 'Invalid credentials. User not found.'
+            });
+        }
+
+        const isPasswordVerified = await verifyPassword(password, user.password);
+
+        if (!isPasswordVerified) {
+            return res.status(401).json({
+                message: 'Incorrect password'
+            });
+        }
+
+        const { accessToken, refreshToken } = await generatingTokens(user);
+
+        const loggedInUser = await User.findById(user._id).select('-password -refreshToken');
+
+        return res
+            .status(200)
+            .cookie('refreshToken', refreshToken, cookieOptions)
+            .cookie('accessToken', accessToken, cookieOptions)
+            .json({
+                message: 'Login successful',
+                accessToken,
+                user: loggedInUser
+            });
+    } catch (error) {
+        console.error('Login Error:', error);
+        return res.status(500).json({
+            message: 'Internal server error during login',
+            error: error.message
+        });
+    }
+};
+
+// Get Current User Profile with Qualifications and Experiences
+const getCurrentUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select('-password -refreshToken');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const qualifications = await Qualification.find({ userId: req.user._id }).sort({ endingYear: -1 });
+        const experiences = await Experience.find({ userId: req.user._id }).sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            user,
+            qualifications,
+            experiences
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: 'Error fetching user profile',
+            error: error.message
+        });
+    }
+};
+
+// Update General Profile Information
+const updateProfile = async (req, res) => {
+    try {
+        const { fullName, phoneNumber, summary, role } = req.body;
+
+        const user = await User.findById(req.user._id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (fullName !== undefined) user.fullName = fullName.trim();
+        if (phoneNumber !== undefined) user.phoneNumber = phoneNumber.trim();
+        if (summary !== undefined) user.summary = summary.trim();
+        if (role && ['job_seeker', 'recruiter'].includes(role)) {
+            user.role = role;
+        }
+
+        await user.save({ validateBeforeSave: false });
+
+        const updatedUser = await User.findById(req.user._id).select('-password -refreshToken');
+
+        return res.status(200).json({
+            user: updatedUser,
+            message: 'Profile updated successfully'
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: 'Failed to update profile',
+            error: error.message
+        });
+    }
+};
+
+// Clerk Single Sign-On / Synchronization Endpoint
+const clerkSync = async (req, res) => {
+    try {
+        const { clerkId, email, fullName, avatarUrl, role = 'job_seeker' } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required from Clerk' });
+        }
+
+        let user = await User.findOne({ email: email.toLowerCase() });
+
+        if (!user) {
+            // Create user
+            const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'user';
+            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+            const userName = `${baseUsername}${randomSuffix}`;
+
+            const dummyPassword = await hashingPassword(clerkId || 'clerk_authenticated_user');
+
+            user = await User.create({
+                userName,
+                email: email.toLowerCase(),
+                fullName: fullName || baseUsername,
+                avatar: avatarUrl || '',
+                role: role === 'recruiter' ? 'recruiter' : 'job_seeker',
+                password: dummyPassword,
+                summary: 'Registered via Clerk Authentication'
+            });
+        } else {
+            // Update details if needed
+            if (avatarUrl && !user.avatar) user.avatar = avatarUrl;
+            if (fullName && !user.fullName) user.fullName = fullName;
+            await user.save({ validateBeforeSave: false });
+        }
+
+        const { accessToken, refreshToken } = await generatingTokens(user);
+
+        const safeUser = await User.findById(user._id).select('-password -refreshToken');
+
+        return res
+            .status(200)
+            .cookie('refreshToken', refreshToken, cookieOptions)
+            .cookie('accessToken', accessToken, cookieOptions)
+            .json({
+                message: 'Clerk authentication synced successfully',
+                accessToken,
+                user: safeUser
+            });
+    } catch (error) {
+        console.error('Clerk Sync Error:', error);
+        return res.status(500).json({
+            message: 'Failed to sync Clerk account',
+            error: error.message
+        });
+    }
+};
+
+// User Logout
+const logout = async (req, res) => {
+    try {
+        if (req.user?._id) {
+            await User.findByIdAndUpdate(req.user._id, { $unset: { refreshToken: 1 } });
+        }
+
+        return res
+            .status(200)
+            .clearCookie('accessToken', cookieOptions)
+            .clearCookie('refreshToken', cookieOptions)
+            .json({ message: 'Logged out successfully' });
+    } catch (error) {
+        return res.status(500).json({ message: 'Logout error', error: error.message });
+    }
+};
+
+// Refresh Access Token
 const generateAccessToken = async (req, res) => {
     try {
-        const refreshToken = req.cookies?.refreshToken;
+        const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
 
         if (!refreshToken) {
             return res.status(401).json({
-                message: 'Refresh token not found. Please login again.'
+                message: 'Refresh token not found. Please log in again.'
             });
         }
 
         const decoded = jwt.verify(refreshToken, process.env.refresh_token_secret);
-
         const user = await User.findById(decoded._id);
 
-        if (!user) {
-            return res.status(404).json({
-                message: 'User not found.'
-            });
-        }
-
-        if (user.refreshToken !== refreshToken) {
+        if (!user || user.refreshToken !== refreshToken) {
             return res.status(401).json({
-                message: 'Invalid refresh token.'
+                message: 'Invalid or revoked refresh token'
             });
         }
 
-        const accessToken = await user.getAccessToken();
+        const accessToken = user.getAccessToken();
 
-        const options = {
-            httpOnly: true,
-            secure: false,
-            sameSite: 'none'
-        };
-
-        return res.cookie('accessToken', accessToken, options).status(200).json({
-            message: 'New access token generated successfully.',
-            accessToken
-        });
+        return res
+            .cookie('accessToken', accessToken, cookieOptions)
+            .status(200)
+            .json({
+                message: 'Access token refreshed',
+                accessToken
+            });
     } catch (error) {
-        if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({
-                error: error.name,
-                message: 'Refresh token expired. Please login again.'
-            });
-        }
-
         return res.status(401).json({
-            message: 'Invalid refresh token.'
+            message: 'Refresh token invalid or expired'
         });
     }
 };
 
-// update the resume
+// Update Resume
 const updateResume = async (req, res) => {
     try {
-        const resume = req.file.path;
+        const resumePath = req.file?.path;
 
-        if (!resume) {
-            return res.status(401).json({
-                message: 'resume is required'
-            });
+        if (!resumePath) {
+            return res.status(400).json({ message: 'Resume file is required' });
         }
 
-        await deleteFromcloudinary(`${req.user.userName}-resume`, 'image');
-        const uploadResume = await uploadFileOnCloudinary(
-            resume,
+        const uploadedResume = await uploadFileOnCloudinary(
+            resumePath,
             `${req.user.userName}-resume`,
             'image'
         );
 
-        if (!uploadResume) {
-            return res.status(500).json({
-                message: 'resume upload failed'
-            });
+        await deleteFile(resumePath);
+
+        if (!uploadedResume?.secure_url) {
+            return res.status(500).json({ message: 'Resume upload failed' });
         }
 
         const user = await User.findById(req.user._id);
+        user.resume = uploadedResume.secure_url;
+        await user.save({ validateBeforeSave: false });
 
-        if (!user) {
-            return res.status(404).json({
-                message: 'user not found '
-            });
-        }
-
-        user.resume = uploadResume.secure_url;
-        await user.save({ validateBeforeSave: true });
-
-        const userAfterSavingResume = await User.findById(req.user._id).select(
-            '-password -refreshToken'
-        );
-
-        const resumeDeletedFromPublic = await deleteFile(resume);
+        const safeUser = await User.findById(req.user._id).select('-password -refreshToken');
 
         return res.status(200).json({
-            user: userAfterSavingResume,
-            message: 'resume uploaded successfully'
+            user: safeUser,
+            resumeUrl: uploadedResume.secure_url,
+            message: 'Resume updated successfully'
         });
     } catch (error) {
-        console.log('resume upload failed', error);
-
-        return res.status(500).json({
-            message: 'resume upload failed'
-        });
+        console.error('Resume upload error:', error);
+        return res.status(500).json({ message: 'Resume upload error', error: error.message });
     }
 };
 
-// update summary
-const updateSummary = async (req, res) => {
-    try {
-        const summary = req.body.summary;
-
-        if (!summary) {
-            return res.status(404).json({
-                message: 'summary can not be empty'
-            });
-        }
-
-        const user = await User.findById(req?.user?._id);
-
-        if (!user) {
-            return res.status(404).json({
-                message: 'user not found '
-            });
-        }
-        user.summary = summary;
-        await user.save({ validateBeforeSave: true });
-
-        const userAfterUpdate = await User.findById(req.user._id).select(
-            ' -password -refreshToken'
-        );
-
-        return res.status(200).json({
-            user: userAfterUpdate,
-            message: 'summary updated successfully'
-        });
-    } catch (error) {
-        console.log('the error at the time of updating summary', error);
-
-        return res.status(500).json({
-            message: 'the summary update failed'
-        });
-    }
-};
-
+// Update Avatar
 const updateAvatar = async (req, res) => {
     try {
-        const avatar = req.file.path;
+        const avatarPath = req.file?.path;
 
-        if (!avatar) {
-            return res.status(401).json({
-                message: 'avatar is required'
-            });
+        if (!avatarPath) {
+            return res.status(400).json({ message: 'Avatar file is required' });
         }
 
-        await deleteFromcloudinary(`${req.user.userName}-avatar`, 'image');
-        const updateAvatar = await uploadFileOnCloudinary(
-            avatar,
+        const uploadedAvatar = await uploadFileOnCloudinary(
+            avatarPath,
             `${req.user.userName}-avatar`,
             'image'
         );
 
-        if (!updateAvatar) {
-            return res.status(500).json({
-                message: 'resume upload failed'
-            });
+        await deleteFile(avatarPath);
+
+        if (!uploadedAvatar?.secure_url) {
+            return res.status(500).json({ message: 'Avatar upload failed' });
         }
 
         const user = await User.findById(req.user._id);
+        user.avatar = uploadedAvatar.secure_url;
+        await user.save({ validateBeforeSave: false });
 
-        if (!user) {
-            return res.status(404).json({
-                message: 'user not found '
-            });
-        }
-
-        user.avatar = updateAvatar.secure_url;
-        await user.save({ validateBeforeSave: true });
-
-        const userAfterSavingAvatar = await User.findById(req.user._id).select(
-            '-password -refreshToken'
-        );
-
-        const avatarDeletedFromPublic = await deleteFile(avatar);
+        const safeUser = await User.findById(req.user._id).select('-password -refreshToken');
 
         return res.status(200).json({
-            user: userAfterSavingAvatar,
-            message: 'resume uploaded successfully'
+            user: safeUser,
+            avatarUrl: uploadedAvatar.secure_url,
+            message: 'Avatar updated successfully'
         });
     } catch (error) {
-        console.log('resume upload failed', error);
-
-        return res.status(500).json({
-            message: 'resume upload failed'
-        });
+        console.error('Avatar upload error:', error);
+        return res.status(500).json({ message: 'Avatar upload error', error: error.message });
     }
 };
 
-export { register, login, generateAccessToken, updateResume, updateSummary, updateAvatar };
+// Update Summary
+const updateSummary = async (req, res) => {
+    try {
+        const { summary } = req.body;
+
+        const user = await User.findById(req.user._id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        user.summary = summary || '';
+        await user.save({ validateBeforeSave: false });
+
+        const safeUser = await User.findById(req.user._id).select('-password -refreshToken');
+
+        return res.status(200).json({
+            user: safeUser,
+            message: 'Summary updated successfully'
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Summary update failed', error: error.message });
+    }
+};
+
+export {
+    register,
+    login,
+    getCurrentUser,
+    updateProfile,
+    clerkSync,
+    logout,
+    generateAccessToken,
+    updateResume,
+    updateSummary,
+    updateAvatar
+};

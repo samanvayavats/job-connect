@@ -6,7 +6,7 @@ const addQualification = async (req, res) => {
 
         if (
             [instituteName, courseName, startingYear, endingYear, percentage].some(
-                (e) => e?.trim() == ''
+                (e) => !e || e.toString().trim() === ''
             )
         ) {
             return res.status(400).json({
@@ -16,55 +16,65 @@ const addQualification = async (req, res) => {
 
         const qualification = await Qualification.create({
             userId: req.user._id,
-            instituteName,
-            courseName,
-            startingYear,
-            endingYear,
-            percentage
+            instituteName: instituteName.trim(),
+            courseName: courseName.trim(),
+            startingYear: startingYear.toString().trim(),
+            endingYear: endingYear.toString().trim(),
+            percentage: percentage.toString().trim()
         });
 
-        return res.status(200).json({
+        return res.status(201).json({
             qualification,
-            message: 'qualification  added'
+            message: 'Qualification added successfully'
         });
     } catch (error) {
-        console.log('the error at the time of addind the qualification');
-
         return res.status(500).json({
-            message: 'adding qualification failed , Please try again after some time'
+            message: 'Adding qualification failed, please try again',
+            error: error.message
         });
+    }
+};
+
+const getMyQualifications = async (req, res) => {
+    try {
+        const qualifications = await Qualification.find({ userId: req.user._id }).sort({ endingYear: -1 });
+        return res.status(200).json({ qualifications });
+    } catch (error) {
+        return res.status(500).json({ message: 'Error retrieving qualifications', error: error.message });
     }
 };
 
 const deleteQualification = async (req, res) => {
     try {
-        const id = req.query.id;
+        const id = req.query.id || req.params.id;
 
         if (!id) {
-            return res.status.json({
-                message: 'id is required'
+            return res.status(400).json({
+                message: 'Qualification ID is required'
             });
         }
 
-        const qualification = await Qualification.findByIdAndDelete(id);
+        const qualification = await Qualification.findById(id);
 
-        const qualificationAfterDeletion = await Qualification.findOne({ _id: id });
-
-        if (qualificationAfterDeletion) {
-            return res.status(500).json({
-                message: 'qualification deletion failed , pls try agian '
-            });
+        if (!qualification) {
+            return res.status(404).json({ message: 'Qualification not found' });
         }
+
+        if (qualification.userId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Unauthorized to delete this qualification' });
+        }
+
+        await Qualification.findByIdAndDelete(id);
 
         return res.status(200).json({
-            message: 'qualification deleted successfully'
+            message: 'Qualification deleted successfully'
         });
     } catch (error) {
-        console.log('error at the time of deleting the qualification', error);
         return res.status(500).json({
-            message: 'qualification deletion failed , pls try agian '
+            message: 'Qualification deletion failed',
+            error: error.message
         });
     }
 };
 
-export { addQualification, deleteQualification };
+export { addQualification, getMyQualifications, deleteQualification };

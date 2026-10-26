@@ -3,27 +3,30 @@ import { User } from '../models/user.model.js';
 
 const verifyUser = async (req, res, next) => {
     try {
-        const token = req?.cookies?.accessToken;
+        const token =
+            req?.cookies?.accessToken ||
+            req?.header('Authorization')?.replace(/^Bearer\s+/, '') ||
+            req?.query?.token;
 
         if (!token) {
-            return res.status(404).json({
-                message: 'token not found , unauthorized user'
+            return res.status(401).json({
+                message: 'Token not found, unauthorized user'
             });
         }
 
-        const verifiedToken = await jwt.verify(token, process.env.access_token_secret);
+        const verifiedToken = jwt.verify(token, process.env.access_token_secret);
 
         if (!verifiedToken) {
             return res.status(401).json({
-                message: 'token invalid , unauthorized user'
+                message: 'Token invalid, unauthorized user'
             });
         }
 
-        const user = await User.findById(verifiedToken?._id);
+        const user = await User.findById(verifiedToken?._id).select('-password');
 
         if (!user) {
             return res.status(404).json({
-                message: 'user not found , unauthorized user'
+                message: 'User not found, unauthorized user'
             });
         }
 
@@ -31,14 +34,11 @@ const verifyUser = async (req, res, next) => {
         next();
     } catch (error) {
         if (error.name === 'TokenExpiredError') {
-            console.warn('Access token expired');
             return res.status(401).json({
                 error: error.name,
                 message: 'Access token expired'
             });
         }
-
-        console.error('JWT verification error:', error.message);
 
         return res.status(401).json({
             message: 'JWT verification failed'
@@ -46,4 +46,26 @@ const verifyUser = async (req, res, next) => {
     }
 };
 
-export { verifyUser };
+const optionalVerifyUser = async (req, res, next) => {
+    try {
+        const token =
+            req?.cookies?.accessToken ||
+            req?.header('Authorization')?.replace(/^Bearer\s+/, '') ||
+            req?.query?.token;
+
+        if (token) {
+            const verifiedToken = jwt.verify(token, process.env.access_token_secret);
+            if (verifiedToken?._id) {
+                const user = await User.findById(verifiedToken._id).select('-password');
+                if (user) {
+                    req.user = user;
+                }
+            }
+        }
+    } catch (error) {
+        // Silently continue without user
+    }
+    next();
+};
+
+export { verifyUser, optionalVerifyUser };

@@ -29,6 +29,31 @@ const applicationSchema = new mongoose.Schema(
         experience: {
             type: String,
             required: true
+        },
+        fullName: {
+            type: String,
+            default: ''
+        },
+        email: {
+            type: String,
+            default: ''
+        },
+        phone: {
+            type: String,
+            default: ''
+        },
+        coverLetter: {
+            type: String,
+            default: ''
+        },
+        status: {
+            type: String,
+            enum: ['Applied', 'Reviewing', 'Shortlisted', 'Interview Scheduled', 'Rejected', 'Accepted'],
+            default: 'Applied'
+        },
+        recruiterNote: {
+            type: String,
+            default: ''
         }
     },
     {
