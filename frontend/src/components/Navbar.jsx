@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 const Navbar = () => {
-  const { user, isAuthenticated, isRecruiter } = useAuth();
+  const { user, isAuthenticated, isRecruiter, switchRole } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -113,9 +113,22 @@ const Navbar = () => {
                   <p className="text-xs font-semibold text-slate-800 leading-none">
                     {user?.fullName || user?.userName}
                   </p>
-                  <span className="text-[10px] text-slate-400 capitalize">
-                    {user?.role === 'recruiter' ? 'Employer / Recruiter' : 'Job Seeker'}
-                  </span>
+                  <div className="flex items-center justify-end space-x-1.5 mt-1">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      isRecruiter
+                        ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                        : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                    }`}>
+                      {isRecruiter ? 'Recruiter' : 'Job Seeker'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => switchRole(isRecruiter ? 'job_seeker' : 'recruiter')}
+                      className="text-[10px] text-indigo-600 hover:text-indigo-800 underline font-medium cursor-pointer"
+                    >
+                      {isRecruiter ? 'Switch to Job Seeker' : 'Switch to Recruiter'}
+                    </button>
+                  </div>
                 </div>
                 <UserButton
                   afterSignOutUrl="/"
@@ -207,6 +220,22 @@ const Navbar = () => {
             >
               My Profile & CV
             </Link>
+
+            <div className="px-3 py-2 border-t border-slate-100 flex items-center justify-between mt-2">
+              <span className="text-xs text-slate-500 font-medium">
+                Persona: <strong className="text-indigo-600 capitalize">{isRecruiter ? 'Recruiter' : 'Job Seeker'}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  switchRole(isRecruiter ? 'job_seeker' : 'recruiter');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-xs font-bold text-indigo-600 underline cursor-pointer"
+              >
+                {isRecruiter ? 'Switch to Job Seeker' : 'Switch to Recruiter'}
+              </button>
+            </div>
           </SignedIn>
 
           <SignedOut>

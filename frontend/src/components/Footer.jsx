@@ -57,7 +57,7 @@ const Footer = () => {
                 <Link to="/recruiter/dashboard" className="hover:text-white transition-colors">Applicant Tracking System</Link>
               </li>
               <li>
-                <Link to="/register" className="hover:text-white transition-colors">Recruiter Sign Up</Link>
+                <Link to="/register?role=recruiter" className="hover:text-white transition-colors">Recruiter Sign Up</Link>
               </li>
             </ul>
           </div>
