@@ -5,12 +5,14 @@ import {
     getJobById,
     getMyJobs,
     updateJob,
-    deleteJob
+    deleteJob,
+    seedSampleJobs
 } from '../controllers/job.controller.js';
 import { verifyUser, optionalVerifyUser } from '../middleware/authentication.js';
 
 const router = Router();
 
+router.route('/seed').get(seedSampleJobs).post(seedSampleJobs);
 router.route('/all').get(optionalVerifyUser, getAllJobs);
 router.route('/get/:id').get(optionalVerifyUser, getJobById);
 router.route('/my-jobs').get(verifyUser, getMyJobs);
