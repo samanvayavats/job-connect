@@ -56,6 +56,7 @@ const verifyUser = async (req, res, next) => {
             let userName = `user_${clerkUserId.slice(-6)}`;
             let fullName = 'Job Connect User';
             let avatar = '';
+            let role = 'job_seeker';
 
             try {
                 if (process.env.CLERK_SECRET_KEY && clerkClient?.users) {
@@ -65,10 +66,19 @@ const verifyUser = async (req, res, next) => {
                         userName = clerkUser.username || userEmail.split('@')[0] || userName;
                         fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || userName;
                         avatar = clerkUser.imageUrl || '';
+                        const metaRole = clerkUser.unsafeMetadata?.role || clerkUser.publicMetadata?.role;
+                        if (metaRole && ['recruiter', 'job_seeker'].includes(metaRole)) {
+                            role = metaRole;
+                        }
                     }
                 }
             } catch (clerkFetchErr) {
                 console.warn('Could not fetch Clerk user info directly, using fallback:', clerkFetchErr.message);
+            }
+
+            const headerRole = req.header('x-clerk-user-role');
+            if (headerRole && ['recruiter', 'job_seeker'].includes(headerRole)) {
+                role = headerRole;
             }
 
             user = await User.create({
@@ -77,8 +87,15 @@ const verifyUser = async (req, res, next) => {
                 email: userEmail.toLowerCase(),
                 fullName,
                 avatar,
-                role: 'job_seeker'
+                role
             });
+        } else {
+            // If header specifies role and it's recruiter, update existing user
+            const headerRole = req.header('x-clerk-user-role');
+            if (headerRole === 'recruiter' && user.role !== 'recruiter') {
+                user.role = 'recruiter';
+                await user.save();
+            }
         }
 
         req.user = user;
