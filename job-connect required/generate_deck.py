@@ -19,7 +19,7 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-OUTPUT_DIR = r"D:\projects\job-connect"
+OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 PPTX_PATH = os.path.join(OUTPUT_DIR, "Job_Connect_Presentation.pptx")
 PDF_PATH = os.path.join(OUTPUT_DIR, "Job_Connect_Presentation.pdf")
 
