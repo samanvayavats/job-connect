@@ -1,6 +1,21 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && envUrl.trim()) {
+    // If in production on HTTPS (e.g. Vercel) but envUrl is pointing to localhost, fallback to Render production API
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && envUrl.includes('localhost')) {
+      return 'https://job-connect-api-8w32.onrender.com/api';
+    }
+    return envUrl.trim();
+  }
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://job-connect-api-8w32.onrender.com/api';
+  }
+  return 'http://localhost:8000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 let clerkTokenGetter = null;
 

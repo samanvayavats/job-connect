@@ -30,6 +30,12 @@ const PostJob = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!description.trim()) {
+      setError('Full job description is required. Please fill in role details.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -39,19 +45,25 @@ const PostJob = () => {
         .filter(Boolean);
 
       await api.post('/job/create-job-opening', {
-        title,
-        companyName,
+        title: title.trim(),
+        companyName: companyName.trim(),
         location: location.trim() || 'Remote',
         jobType,
-        experienceRequired,
+        experienceRequired: experienceRequired.trim(),
         salary: salary.trim() || 'Negotiable',
         skillsRequired: skillsArray,
-        description
+        description: description.trim()
       });
 
       navigate('/recruiter/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to publish job vacancy. Please check inputs.');
+      console.error('Failed to post job:', err);
+      const errMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        (err.message === 'Network Error' ? 'Network Error: Unable to reach the API server. Please check connection.' : err.message) ||
+        'Failed to publish job vacancy. Please check inputs.';
+      setError(errMsg);
     } finally {
       setLoading(false);
     }

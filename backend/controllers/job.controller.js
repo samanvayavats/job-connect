@@ -14,6 +14,12 @@ const createJob = async (req, res) => {
             skillsRequired = []
         } = req.body;
 
+        if (!req.user || !req.user._id) {
+            return res.status(401).json({
+                message: 'Unauthorized: User profile could not be verified. Please re-authenticate.'
+            });
+        }
+
         if (!title?.trim() || !experienceRequired?.trim() || !companyName?.trim() || !description?.trim()) {
             return res.status(400).json({
                 message: 'Title, company name, experience required, and description are required'
