@@ -3,6 +3,7 @@ import { Qualification } from '../models/qualification.model.js';
 import { Experience } from '../models/experience.model.js';
 import { uploadFileOnCloudinary } from '../utils/cloudinary.js';
 import { deleteFile } from '../utils/filehandler.js';
+import fs from 'node:fs/promises';
 
 // Synchronize Clerk user profile with MongoDB
 const syncClerkUser = async (req, res) => {
@@ -127,7 +128,7 @@ const updateProfile = async (req, res) => {
     }
 };
 
-// Update Resume via Multer & Cloudinary
+// Update Resume via Multer & Cloudinary with Base64 Fallback
 const updateResume = async (req, res) => {
     try {
         const resumePath = req.file?.path;
@@ -136,25 +137,37 @@ const updateResume = async (req, res) => {
             return res.status(400).json({ message: 'Resume file is required' });
         }
 
+        let resumeUrl = null;
+
+        // Try uploading to Cloudinary with 'auto' resource type
         const uploadedResume = await uploadFileOnCloudinary(
             resumePath,
-            `${req.user.userName || req.user.clerkId}-resume`,
-            'image'
+            `${req.user.userName || req.user.clerkId || 'user'}-resume-${Date.now()}`,
+            'auto'
         );
 
-        await deleteFile(resumePath);
-
-        if (!uploadedResume?.secure_url) {
-            return res.status(500).json({ message: 'Resume upload failed' });
+        if (uploadedResume?.secure_url) {
+            resumeUrl = uploadedResume.secure_url;
+            await deleteFile(resumePath);
+        } else {
+            // Fallback: convert file to inline Base64 data URI so it works even without Cloudinary keys
+            try {
+                const fileData = await fs.readFile(resumePath);
+                const mimeType = req.file.mimetype || 'application/pdf';
+                resumeUrl = `data:${mimeType};base64,${fileData.toString('base64')}`;
+                await deleteFile(resumePath);
+            } catch (readErr) {
+                resumeUrl = `/public/${req.file.filename}`;
+            }
         }
 
         const user = await User.findById(req.user._id);
-        user.resume = uploadedResume.secure_url;
+        user.resume = resumeUrl;
         await user.save();
 
         return res.status(200).json({
             user,
-            resumeUrl: uploadedResume.secure_url,
+            resumeUrl,
             message: 'Resume updated successfully'
         });
     } catch (error) {
@@ -163,7 +176,7 @@ const updateResume = async (req, res) => {
     }
 };
 
-// Update Avatar via Multer & Cloudinary
+// Update Avatar via Multer & Cloudinary with Base64 Fallback
 const updateAvatar = async (req, res) => {
     try {
         const avatarPath = req.file?.path;
@@ -172,25 +185,35 @@ const updateAvatar = async (req, res) => {
             return res.status(400).json({ message: 'Avatar file is required' });
         }
 
+        let avatarUrl = null;
+
         const uploadedAvatar = await uploadFileOnCloudinary(
             avatarPath,
-            `${req.user.userName || req.user.clerkId}-avatar`,
-            'image'
+            `${req.user.userName || req.user.clerkId || 'user'}-avatar-${Date.now()}`,
+            'auto'
         );
 
-        await deleteFile(avatarPath);
-
-        if (!uploadedAvatar?.secure_url) {
-            return res.status(500).json({ message: 'Avatar upload failed' });
+        if (uploadedAvatar?.secure_url) {
+            avatarUrl = uploadedAvatar.secure_url;
+            await deleteFile(avatarPath);
+        } else {
+            try {
+                const fileData = await fs.readFile(avatarPath);
+                const mimeType = req.file.mimetype || 'image/png';
+                avatarUrl = `data:${mimeType};base64,${fileData.toString('base64')}`;
+                await deleteFile(avatarPath);
+            } catch (e) {
+                avatarUrl = `/public/${req.file.filename}`;
+            }
         }
 
         const user = await User.findById(req.user._id);
-        user.avatar = uploadedAvatar.secure_url;
+        user.avatar = avatarUrl;
         await user.save();
 
         return res.status(200).json({
             user,
-            avatarUrl: uploadedAvatar.secure_url,
+            avatarUrl,
             message: 'Avatar updated successfully'
         });
     } catch (error) {

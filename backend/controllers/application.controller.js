@@ -3,6 +3,7 @@ import { Job } from '../models/job.model.js';
 import { User } from '../models/user.model.js';
 import { uploadFileOnCloudinary } from '../utils/cloudinary.js';
 import { deleteFile } from '../utils/filehandler.js';
+import fs from 'node:fs/promises';
 
 const applyForJob = async (req, res) => {
     try {
@@ -45,13 +46,24 @@ const applyForJob = async (req, res) => {
         if (req.file) {
             const uploadedResume = await uploadFileOnCloudinary(
                 req.file.path,
-                `${req.user.userName}-${jobId}-resume`,
-                'image'
+                `${req.user.userName || 'applicant'}-${jobId}-resume-${Date.now()}`,
+                'auto'
             );
-            if (uploadedResume) {
+
+            if (uploadedResume?.secure_url) {
                 resumeUrl = uploadedResume.secure_url;
+                await deleteFile(req.file.path);
+            } else {
+                // Fallback to inline Base64 data URI so it works even if Cloudinary is not configured
+                try {
+                    const fileData = await fs.readFile(req.file.path);
+                    const mimeType = req.file.mimetype || 'application/pdf';
+                    resumeUrl = `data:${mimeType};base64,${fileData.toString('base64')}`;
+                    await deleteFile(req.file.path);
+                } catch (readErr) {
+                    resumeUrl = `/public/${req.file.filename}`;
+                }
             }
-            await deleteFile(req.file.path);
         }
 
         if (!resumeUrl) {
@@ -63,7 +75,7 @@ const applyForJob = async (req, res) => {
         const application = await Application.create({
             userId: req.user._id,
             jobId,
-            username: req.user.userName,
+            username: req.user.userName || req.user.clerkId,
             fullName: fullName || req.user.fullName || req.user.userName,
             email: email || req.user.email,
             phone: phone || req.user.phoneNumber || '',
@@ -79,6 +91,7 @@ const applyForJob = async (req, res) => {
             message: 'Application submitted successfully'
         });
     } catch (error) {
+        console.error('Application submission error:', error);
         return res.status(500).json({ message: 'Application submission failed', error: error.message });
     }
 };
