@@ -7,6 +7,7 @@ dotenv.config({
 import cors from 'cors';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import { clerkMiddleware } from '@clerk/express';
 import connectdb from './utils/db.js';
 import userRouter from './routes/user.route.js';
 import qualificationRouter from './routes/qualification.route.js';
@@ -26,15 +27,14 @@ const allowedOrigins = [
 app.use(
     cors({
         origin: function (origin, callback) {
-            // Allow requests with no origin (like mobile apps, curl, postman)
             if (!origin || allowedOrigins.includes(origin)) {
                 return callback(null, true);
             }
-            return callback(null, true); // Permissive in development
+            return callback(null, true);
         },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization']
+        allowedHeaders: ['Content-Type', 'Authorization', 'x-clerk-user-id']
     })
 );
 
@@ -43,9 +43,16 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 app.use(cookieParser());
 
+// Initialize Clerk Authentication Middleware
+try {
+    app.use(clerkMiddleware());
+} catch (clerkInitErr) {
+    console.warn('Clerk middleware initialized in standalone fallback mode:', clerkInitErr.message);
+}
+
 // Health Check
 app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'healthy', project: 'Job Connect API' });
+    res.status(200).json({ status: 'healthy', project: 'Job Connect API (Clerk Auth)' });
 });
 
 // Routes
@@ -66,7 +73,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 8000;
 
-// Connecting the db and starting server
+// Connect to MongoDB and start server
 connectdb()
     .then(() => {
         app.listen(PORT, () => {

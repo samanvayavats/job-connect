@@ -2,6 +2,12 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
+let clerkTokenGetter = null;
+
+export const setClerkTokenGetter = (getter) => {
+  clerkTokenGetter = getter;
+};
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
@@ -10,30 +16,33 @@ const api = axios.create({
   }
 });
 
-// Request interceptor to attach bearer token
+// Request interceptor to attach Clerk session token & identity headers
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+  async (config) => {
+    try {
+      if (clerkTokenGetter) {
+        const token = await clerkTokenGetter();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch (err) {
+      // Fallback
     }
+
+    const localToken = localStorage.getItem('clerk_token');
+    if (!config.headers.Authorization && localToken) {
+      config.headers.Authorization = `Bearer ${localToken}`;
+    }
+
+    const clerkUserId = localStorage.getItem('clerk_user_id');
+    if (clerkUserId) {
+      config.headers['x-clerk-user-id'] = clerkUserId;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
-);
-
-// Response interceptor to catch unauthorized responses
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear token on definitive unauthorized if not already on login
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-        localStorage.removeItem('token');
-      }
-    }
-    return Promise.reject(error);
-  }
 );
 
 export default api;

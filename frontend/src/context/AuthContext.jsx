@@ -1,130 +1,158 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../services/api';
+import { useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
+import api, { setClerkTokenGetter } from '../services/api';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const { user: clerkUser, isLoaded: clerkLoaded, isSignedIn } = useUser();
+  const { getToken, signOut } = useClerkAuth();
+  const clerk = useClerk();
+
+  const [dbUser, setDbUser] = useState(null);
+  const [qualifications, setQualifications] = useState([]);
+  const [experiences, setExperiences] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load current user profile if token exists
+  // Configure token getter for Axios
   useEffect(() => {
-    const fetchUser = async () => {
-      const storedToken = localStorage.getItem('token');
-      if (storedToken) {
+    if (isSignedIn && getToken) {
+      setClerkTokenGetter(async () => {
         try {
-          const res = await api.get('/user/me');
-          setUser(res.data.user);
-        } catch (err) {
-          console.warn('Failed to restore session:', err.message);
-          localStorage.removeItem('token');
-          setToken(null);
-          setUser(null);
+          const token = await getToken();
+          if (token) {
+            localStorage.setItem('clerk_token', token);
+          }
+          return token;
+        } catch (e) {
+          return null;
         }
+      });
+      if (clerkUser?.id) {
+        localStorage.setItem('clerk_user_id', clerkUser.id);
+      }
+    } else {
+      localStorage.removeItem('clerk_token');
+      localStorage.removeItem('clerk_user_id');
+      setClerkTokenGetter(null);
+    }
+  }, [isSignedIn, getToken, clerkUser]);
+
+  // Sync Clerk profile with MongoDB whenever Clerk state changes
+  useEffect(() => {
+    const syncWithBackend = async () => {
+      if (!clerkLoaded) return;
+
+      if (isSignedIn && clerkUser) {
+        try {
+          const selectedRole =
+            clerkUser.unsafeMetadata?.role ||
+            localStorage.getItem('clerk_selected_role') ||
+            'job_seeker';
+
+          const syncPayload = {
+            clerkId: clerkUser.id,
+            email: clerkUser.primaryEmailAddress?.emailAddress,
+            fullName:
+              clerkUser.fullName ||
+              `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() ||
+              clerkUser.username,
+            avatarUrl: clerkUser.imageUrl,
+            role: selectedRole
+          };
+
+          const res = await api.post('/user/sync', syncPayload);
+          setDbUser(res.data.user);
+          setQualifications(res.data.qualifications || []);
+          setExperiences(res.data.experiences || []);
+        } catch (err) {
+          console.warn('Clerk to MongoDB sync warning:', err.message);
+        }
+      } else {
+        setDbUser(null);
+        setQualifications([]);
+        setExperiences([]);
       }
       setLoading(false);
     };
 
-    fetchUser();
-  }, []);
+    syncWithBackend();
+  }, [clerkLoaded, isSignedIn, clerkUser]);
 
-  const login = async (identifier, password) => {
-    const res = await api.post('/user/login', {
-      userName: identifier,
-      password
-    });
-
-    const { user: loggedInUser, accessToken } = res.data;
-    if (accessToken) {
-      localStorage.setItem('token', accessToken);
-      setToken(accessToken);
-    }
-    setUser(loggedInUser);
-    return res.data;
-  };
-
-  const register = async (formData) => {
-    // If formData is FormData instance (for file uploads) or normal JSON
-    const headers = formData instanceof FormData ? { 'Content-Type': 'multipart/form-data' } : {};
-    const res = await api.post('/user/register', formData, { headers });
-
-    const { user: registeredUser, accessToken } = res.data;
-    if (accessToken) {
-      localStorage.setItem('token', accessToken);
-      setToken(accessToken);
-    }
-    setUser(registeredUser);
-    return res.data;
-  };
-
-  const logout = async () => {
+  const refreshUser = async () => {
+    if (!isSignedIn) return;
     try {
-      await api.post('/user/logout');
+      const res = await api.get('/user/me');
+      setDbUser(res.data.user);
+      setQualifications(res.data.qualifications || []);
+      setExperiences(res.data.experiences || []);
+      return res.data;
     } catch (err) {
-      // Continue client logout even if server fails
-    } finally {
-      localStorage.removeItem('token');
-      setToken(null);
-      setUser(null);
+      console.error('Error refreshing user from database:', err);
     }
   };
 
   const updateUserProfile = async (updatedData) => {
-    const res = await api.put('/user/update-profile', updatedData);
-    setUser(res.data.user);
-    return res.data.user;
-  };
-
-  const refreshUser = async () => {
     try {
-      const res = await api.get('/user/me');
-      setUser(res.data.user);
-      return res.data;
-    } catch (err) {
-      console.error('Error refreshing user:', err);
-    }
-  };
-
-  const syncClerkUser = async (clerkUserData, selectedRole = 'job_seeker') => {
-    try {
-      const payload = {
-        clerkId: clerkUserData.id,
-        email: clerkUserData.primaryEmailAddress?.emailAddress,
-        fullName: clerkUserData.fullName || clerkUserData.firstName || 'User',
-        avatarUrl: clerkUserData.imageUrl || '',
-        role: selectedRole
-      };
-
-      const res = await api.post('/user/clerk-sync', payload);
-      const { user: syncedUser, accessToken } = res.data;
-      if (accessToken) {
-        localStorage.setItem('token', accessToken);
-        setToken(accessToken);
+      // If role changed, also persist to Clerk metadata
+      if (updatedData.role && clerkUser) {
+        await clerkUser.update({
+          unsafeMetadata: {
+            ...clerkUser.unsafeMetadata,
+            role: updatedData.role
+          }
+        });
       }
-      setUser(syncedUser);
-      return syncedUser;
+
+      const res = await api.put('/user/update-profile', updatedData);
+      setDbUser(res.data.user);
+      return res.data.user;
     } catch (err) {
-      console.error('Clerk synchronization failed:', err);
+      console.error('Failed to update profile:', err);
       throw err;
     }
   };
 
+  const logout = async () => {
+    try {
+      localStorage.removeItem('clerk_token');
+      localStorage.removeItem('clerk_user_id');
+      await signOut();
+    } catch (err) {
+      console.error('Error signing out:', err);
+    }
+  };
+
+  // Merge Clerk and MongoDB fields
+  const mergedUser = isSignedIn && clerkUser ? {
+    ...dbUser,
+    _id: dbUser?._id,
+    clerkId: clerkUser.id,
+    userName: dbUser?.userName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0],
+    email: clerkUser.primaryEmailAddress?.emailAddress || dbUser?.email,
+    fullName: dbUser?.fullName || clerkUser.fullName || 'Job Connect User',
+    avatar: dbUser?.avatar || clerkUser.imageUrl,
+    role: dbUser?.role || clerkUser.unsafeMetadata?.role || 'job_seeker',
+    resume: dbUser?.resume || '',
+    summary: dbUser?.summary || '',
+    phoneNumber: dbUser?.phoneNumber || ''
+  } : null;
+
   return (
     <AuthContext.Provider
       value={{
-        user,
-        token,
-        loading,
-        isAuthenticated: !!user,
-        isRecruiter: user?.role === 'recruiter',
-        isJobSeeker: user?.role === 'job_seeker',
-        login,
-        register,
+        user: mergedUser,
+        clerkUser,
+        dbUser,
+        qualifications,
+        experiences,
+        loading: !clerkLoaded || loading,
+        isAuthenticated: !!isSignedIn,
+        isRecruiter: mergedUser?.role === 'recruiter',
+        isJobSeeker: mergedUser?.role === 'job_seeker',
         logout,
         updateUserProfile,
-        refreshUser,
-        syncClerkUser
+        refreshUser
       }}
     >
       {children}

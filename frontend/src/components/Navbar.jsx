@@ -1,29 +1,21 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { UserButton, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { useAuth } from '../context/AuthContext';
 import { 
   Briefcase, 
   User, 
-  LogOut, 
   PlusCircle, 
   FileText, 
   Layers, 
   Menu, 
-  X,
-  ChevronDown
+  X
 } from 'lucide-react';
 
 const Navbar = () => {
-  const { user, isAuthenticated, isRecruiter, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user, isAuthenticated, isRecruiter } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
 
   const isActive = (path) => location.pathname === path;
 
@@ -60,133 +52,83 @@ const Navbar = () => {
               Explore Jobs
             </Link>
 
-            {isAuthenticated && !isRecruiter && (
-              <Link
-                to="/my-applications"
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                  isActive('/my-applications')
-                    ? 'text-indigo-600 bg-indigo-50'
-                    : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
-                }`}
-              >
-                <FileText className="w-4 h-4" />
-                <span>My Applications</span>
-              </Link>
-            )}
-
-            {isAuthenticated && isRecruiter && (
-              <>
+            <SignedIn>
+              {!isRecruiter && (
                 <Link
-                  to="/recruiter/dashboard"
+                  to="/my-applications"
                   className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                    isActive('/recruiter/dashboard')
+                    isActive('/my-applications')
                       ? 'text-indigo-600 bg-indigo-50'
                       : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
                   }`}
                 >
-                  <Layers className="w-4 h-4" />
-                  <span>Recruiter Dashboard</span>
+                  <FileText className="w-4 h-4" />
+                  <span>My Applications</span>
                 </Link>
+              )}
 
-                <Link
-                  to="/post-job"
-                  className="px-3.5 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors flex items-center space-x-1.5"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  <span>Post Vacancy</span>
-                </Link>
-              </>
-            )}
+              {isRecruiter && (
+                <>
+                  <Link
+                    to="/recruiter/dashboard"
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                      isActive('/recruiter/dashboard')
+                        ? 'text-indigo-600 bg-indigo-50'
+                        : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span>Recruiter Dashboard</span>
+                  </Link>
+
+                  <Link
+                    to="/post-job"
+                    className="px-3.5 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors flex items-center space-x-1.5"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>Post Vacancy</span>
+                  </Link>
+                </>
+              )}
+
+              <Link
+                to="/profile"
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                  isActive('/profile')
+                    ? 'text-indigo-600 bg-indigo-50'
+                    : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
+                }`}
+              >
+                <User className="w-4 h-4" />
+                <span>Profile & CV</span>
+              </Link>
+            </SignedIn>
           </nav>
 
-          {/* User Auth Section */}
+          {/* User Auth Section with Clerk */}
           <div className="hidden md:flex items-center space-x-3">
-            {isAuthenticated ? (
-              <div className="relative">
-                <button
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center space-x-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none"
-                >
-                  {user?.avatar ? (
-                    <img
-                      src={user.avatar}
-                      alt={user.userName}
-                      className="w-8 h-8 rounded-lg object-cover border border-slate-200"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm">
-                      {user?.userName?.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="text-left hidden lg:block">
-                    <p className="text-xs font-semibold text-slate-800 leading-none">
-                      {user?.fullName || user?.userName}
-                    </p>
-                    <span className="text-[10px] text-slate-400 capitalize">
-                      {user?.role === 'recruiter' ? 'Employer' : 'Candidate'}
-                    </span>
-                  </div>
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
-                </button>
-
-                {/* Dropdown Menu */}
-                {dropdownOpen && (
-                  <div 
-                    className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50"
-                    onMouseLeave={() => setDropdownOpen(false)}
-                  >
-                    <div className="px-4 py-2 border-b border-slate-100">
-                      <p className="text-sm font-semibold text-slate-800">{user?.fullName || user?.userName}</p>
-                      <p className="text-xs text-slate-400 truncate">{user?.email}</p>
-                      <span className="inline-block mt-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
-                        {user?.role === 'recruiter' ? 'Recruiter / Employer' : 'Job Seeker'}
-                      </span>
-                    </div>
-
-                    <Link
-                      to="/profile"
-                      onClick={() => setDropdownOpen(false)}
-                      className="flex items-center space-x-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                      <User className="w-4 h-4 text-slate-400" />
-                      <span>My Profile & Resume</span>
-                    </Link>
-
-                    {isRecruiter && (
-                      <Link
-                        to="/recruiter/dashboard"
-                        onClick={() => setDropdownOpen(false)}
-                        className="flex items-center space-x-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                      >
-                        <Layers className="w-4 h-4 text-slate-400" />
-                        <span>Manage Job Postings</span>
-                      </Link>
-                    )}
-
-                    {!isRecruiter && (
-                      <Link
-                        to="/my-applications"
-                        onClick={() => setDropdownOpen(false)}
-                        className="flex items-center space-x-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                      >
-                        <FileText className="w-4 h-4 text-slate-400" />
-                        <span>Application Status</span>
-                      </Link>
-                    )}
-
-                    <div className="border-t border-slate-100 my-1"></div>
-
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center space-x-2 px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition-colors text-left"
-                    >
-                      <LogOut className="w-4 h-4 text-rose-500" />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
-                )}
+            <SignedIn>
+              <div className="flex items-center space-x-3 pl-2">
+                <div className="text-right hidden lg:block">
+                  <p className="text-xs font-semibold text-slate-800 leading-none">
+                    {user?.fullName || user?.userName}
+                  </p>
+                  <span className="text-[10px] text-slate-400 capitalize">
+                    {user?.role === 'recruiter' ? 'Employer / Recruiter' : 'Job Seeker'}
+                  </span>
+                </div>
+                <UserButton
+                  afterSignOutUrl="/"
+                  appearance={{
+                    elements: {
+                      userButtonAvatarBox: 'w-9 h-9 rounded-xl border border-slate-200'
+                    }
+                  }}
+                />
               </div>
-            ) : (
+            </SignedIn>
+
+            <SignedOut>
               <div className="flex items-center space-x-3">
                 <Link
                   to="/login"
@@ -201,11 +143,14 @@ const Navbar = () => {
                   Create Account
                 </Link>
               </div>
-            )}
+            </SignedOut>
           </div>
 
           {/* Mobile menu button */}
-          <div className="flex md:hidden items-center">
+          <div className="flex md:hidden items-center space-x-2">
+            <SignedIn>
+              <UserButton afterSignOutUrl="/" />
+            </SignedIn>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-slate-100"
@@ -227,54 +172,44 @@ const Navbar = () => {
             Explore Jobs
           </Link>
 
-          {isAuthenticated ? (
-            <>
-              {isRecruiter ? (
-                <>
-                  <Link
-                    to="/recruiter/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Recruiter Dashboard
-                  </Link>
-                  <Link
-                    to="/post-job"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block px-3 py-2 rounded-lg text-base font-medium text-indigo-600 hover:bg-indigo-50"
-                  >
-                    Post Vacancy
-                  </Link>
-                </>
-              ) : (
+          <SignedIn>
+            {isRecruiter ? (
+              <>
                 <Link
-                  to="/my-applications"
+                  to="/recruiter/dashboard"
                   onClick={() => setMobileMenuOpen(false)}
                   className="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50"
                 >
-                  My Applications
+                  Recruiter Dashboard
                 </Link>
-              )}
-
+                <Link
+                  to="/post-job"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-2 rounded-lg text-base font-medium text-indigo-600 hover:bg-indigo-50"
+                >
+                  Post Vacancy
+                </Link>
+              </>
+            ) : (
               <Link
-                to="/profile"
+                to="/my-applications"
                 onClick={() => setMobileMenuOpen(false)}
                 className="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50"
               >
-                My Profile
+                My Applications
               </Link>
+            )}
 
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  handleLogout();
-                }}
-                className="w-full text-left block px-3 py-2 rounded-lg text-base font-medium text-rose-600 hover:bg-rose-50"
-              >
-                Sign Out
-              </button>
-            </>
-          ) : (
+            <Link
+              to="/profile"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50"
+            >
+              My Profile & CV
+            </Link>
+          </SignedIn>
+
+          <SignedOut>
             <div className="pt-3 border-t border-slate-100 space-y-2">
               <Link
                 to="/login"
@@ -291,7 +226,7 @@ const Navbar = () => {
                 Create Account
               </Link>
             </div>
-          )}
+          </SignedOut>
         </div>
       )}
     </header>

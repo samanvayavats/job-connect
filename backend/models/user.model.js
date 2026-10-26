@@ -1,16 +1,22 @@
 import mongoose from 'mongoose';
-import jwt from 'jsonwebtoken';
+
 const userSchema = new mongoose.Schema(
     {
+        clerkId: {
+            type: String,
+            unique: true,
+            sparse: true,
+            index: true
+        },
         userName: {
             type: String,
-            required: true,
             lowercase: true,
-            unique: true
+            trim: true
         },
         email: {
             type: String,
-            lowercase: true
+            lowercase: true,
+            trim: true
         },
         fullName: {
             type: String,
@@ -27,47 +33,22 @@ const userSchema = new mongoose.Schema(
         },
         password: {
             type: String,
-            required: true
+            required: false // Managed securely via Clerk
         },
         summary: {
-            type: String
+            type: String,
+            default: ''
         },
         resume: {
-            type: String
+            type: String,
+            default: ''
         },
         avatar: {
-            type: String
-        },
-        refreshToken: {
-            type: String
+            type: String,
+            default: ''
         }
     },
     { timestamps: true }
 );
-
-userSchema.methods.getRefreshToken = function () {
-    return jwt.sign(
-        {
-            _id: this._id,
-            userName: this.userName
-        },
-        process.env.refresh_token_secret,
-        {
-            expiresIn: '10d'
-        }
-    );
-};
-userSchema.methods.getAccessToken = function () {
-    return jwt.sign(
-        {
-            _id: this._id,
-            userName: this.userName
-        },
-        process.env.access_token_secret,
-        {
-            expiresIn: 900 // 15 min
-        }
-    );
-};
 
 export const User = mongoose.model('User', userSchema);
