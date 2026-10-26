@@ -48,7 +48,7 @@ const syncClerkUser = async (req, res) => {
             }
             if (avatarUrl && !user.avatar) user.avatar = avatarUrl;
             if (phoneNumber && !user.phoneNumber) user.phoneNumber = phoneNumber.trim();
-            if (role && ['job_seeker', 'recruiter'].includes(role) && !user.role) {
+            if (role && ['job_seeker', 'recruiter'].includes(role)) {
                 user.role = role;
             }
             await user.save();
