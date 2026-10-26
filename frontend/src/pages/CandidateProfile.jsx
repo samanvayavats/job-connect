@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 const CandidateProfile = () => {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, switchRole } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -81,6 +81,9 @@ const CandidateProfile = () => {
     setProfileMsg({ type: '', text: '' });
 
     try {
+      if (role !== user?.role) {
+        await switchRole(role);
+      }
       await api.put('/user/update-profile', {
         fullName,
         phoneNumber,
@@ -244,9 +247,30 @@ const CandidateProfile = () => {
             <h2 className="text-xl font-bold text-slate-900">{user?.fullName || user?.userName}</h2>
             <p className="text-sm text-slate-500 font-medium">@{user?.userName}</p>
             <p className="text-xs text-slate-400">{user?.email}</p>
-            <span className="inline-block mt-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-semibold">
-              {user?.role === 'recruiter' ? 'Recruiter Account' : 'Job Seeker'}
-            </span>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${
+                user?.role === 'recruiter'
+                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                  : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+              }`}>
+                {user?.role === 'recruiter' ? 'Recruiter / Employer Account' : 'Job Seeker Account'}
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  const targetRole = user?.role === 'recruiter' ? 'job_seeker' : 'recruiter';
+                  await switchRole(targetRole);
+                  setRole(targetRole);
+                  setProfileMsg({
+                    type: 'success',
+                    text: `Switched account persona to ${targetRole === 'recruiter' ? 'Recruiter' : 'Job Seeker'}!`
+                  });
+                }}
+                className="px-3 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full transition-colors cursor-pointer"
+              >
+                {user?.role === 'recruiter' ? 'Switch to Job Seeker' : 'Switch to Recruiter'}
+              </button>
+            </div>
           </div>
 
           {/* Resume Widget */}
@@ -301,6 +325,39 @@ const CandidateProfile = () => {
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Account Role & Persona</label>
+            <div className="grid grid-cols-2 gap-3 p-1.5 bg-slate-100 rounded-2xl max-w-md">
+              <button
+                type="button"
+                onClick={() => setRole('job_seeker')}
+                className={`flex items-center justify-center space-x-2 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  role === 'job_seeker'
+                    ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>Job Seeker</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole('recruiter')}
+                className={`flex items-center justify-center space-x-2 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  role === 'recruiter'
+                    ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>Recruiter / Employer</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {role === 'recruiter'
+                ? 'Recruiter: You have permission to Post Vacancies, manage your job openings, and review candidate applications in the ATS board.'
+                : 'Job Seeker: You can explore openings, apply with your resume, and track application status.'}
+            </p>
           </div>
 
           <div>

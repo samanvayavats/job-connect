@@ -1,16 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SignUp } from '@clerk/clerk-react';
-import { Briefcase, Users, Building2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Briefcase, Users, Building2, CheckCircle2 } from 'lucide-react';
 
 const Register = () => {
-  const [selectedRole, setSelectedRole] = useState(
-    localStorage.getItem('clerk_selected_role') || 'job_seeker'
-  );
+  const [searchParams] = useSearchParams();
+  const queryRole = searchParams.get('role');
+
+  const [selectedRole, setSelectedRole] = useState(() => {
+    if (queryRole === 'recruiter' || queryRole === 'job_seeker') {
+      localStorage.setItem('clerk_selected_role', queryRole);
+      return queryRole;
+    }
+    return localStorage.getItem('clerk_selected_role') || 'job_seeker';
+  });
+
+  useEffect(() => {
+    if (queryRole && ['recruiter', 'job_seeker'].includes(queryRole)) {
+      setSelectedRole(queryRole);
+      localStorage.setItem('clerk_selected_role', queryRole);
+    }
+  }, [queryRole]);
 
   const handleRoleSelect = (role) => {
     setSelectedRole(role);
     localStorage.setItem('clerk_selected_role', role);
   };
+
+  const redirectTarget = selectedRole === 'recruiter' ? '/recruiter/dashboard' : '/my-applications';
 
   return (
     <div className="min-h-[85vh] flex flex-col items-center justify-center px-4 py-12">
@@ -23,7 +40,7 @@ const Register = () => {
       </div>
 
       {/* Account Type Selector */}
-      <div className="max-w-md w-full mb-6 p-1.5 bg-slate-200/80 rounded-2xl grid grid-cols-2 gap-2 shadow-inner">
+      <div className="max-w-md w-full mb-3 p-1.5 bg-slate-200/80 rounded-2xl grid grid-cols-2 gap-2 shadow-inner">
         <button
           type="button"
           onClick={() => handleRoleSelect('job_seeker')}
@@ -51,11 +68,24 @@ const Register = () => {
         </button>
       </div>
 
+      {/* Persona Description Banner */}
+      <div className="max-w-md w-full mb-6 p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-900 flex items-center space-x-2">
+        <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+        <span>
+          {selectedRole === 'recruiter'
+            ? 'Account Type: Recruiter / Employer — Grants permission to Post Vacancies, Manage Listings, and Review Applicants in the ATS Board.'
+            : 'Account Type: Job Seeker — Allows searching verified openings, uploading your resume, and tracking your job applications.'}
+        </span>
+      </div>
+
       <div className="w-full flex justify-center">
         <SignUp
+          key={selectedRole}
           routing="path"
           path="/register"
           signInUrl="/login"
+          forceRedirectUrl={redirectTarget}
+          fallbackRedirectUrl={redirectTarget}
           unsafeMetadata={{
             role: selectedRole
           }}

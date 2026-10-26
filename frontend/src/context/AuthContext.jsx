@@ -45,10 +45,25 @@ export const AuthProvider = ({ children }) => {
 
       if (isSignedIn && clerkUser) {
         try {
-          const selectedRole =
-            clerkUser.unsafeMetadata?.role ||
-            localStorage.getItem('clerk_selected_role') ||
-            'job_seeker';
+          const localRole = localStorage.getItem('clerk_selected_role');
+          const clerkRole = clerkUser.unsafeMetadata?.role || clerkUser.publicMetadata?.role;
+
+          let selectedRole = clerkRole || localRole || 'job_seeker';
+
+          // If localRole is recruiter and Clerk metadata doesn't reflect it, persist to Clerk
+          if (localRole === 'recruiter' && clerkRole !== 'recruiter') {
+            selectedRole = 'recruiter';
+            try {
+              await clerkUser.update({
+                unsafeMetadata: {
+                  ...clerkUser.unsafeMetadata,
+                  role: 'recruiter'
+                }
+              });
+            } catch (metaErr) {
+              console.warn('Could not update Clerk metadata:', metaErr);
+            }
+          }
 
           const syncPayload = {
             clerkId: clerkUser.id,
@@ -65,6 +80,10 @@ export const AuthProvider = ({ children }) => {
           setDbUser(res.data.user);
           setQualifications(res.data.qualifications || []);
           setExperiences(res.data.experiences || []);
+
+          if (res.data.user?.role) {
+            localStorage.setItem('clerk_selected_role', res.data.user.role);
+          }
         } catch (err) {
           console.warn('Clerk to MongoDB sync warning:', err.message);
         }
@@ -92,16 +111,40 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const updateUserProfile = async (updatedData) => {
+  const switchRole = async (newRole) => {
+    if (!['job_seeker', 'recruiter'].includes(newRole)) return;
+    localStorage.setItem('clerk_selected_role', newRole);
     try {
-      // If role changed, also persist to Clerk metadata
-      if (updatedData.role && clerkUser) {
+      if (clerkUser) {
         await clerkUser.update({
           unsafeMetadata: {
             ...clerkUser.unsafeMetadata,
-            role: updatedData.role
+            role: newRole
           }
         });
+      }
+      const res = await api.put('/user/update-profile', { role: newRole });
+      setDbUser(res.data.user);
+      return res.data.user;
+    } catch (err) {
+      console.error('Failed to switch role:', err);
+      throw err;
+    }
+  };
+
+  const updateUserProfile = async (updatedData) => {
+    try {
+      // If role changed, also persist to Clerk metadata and localStorage
+      if (updatedData.role) {
+        localStorage.setItem('clerk_selected_role', updatedData.role);
+        if (clerkUser) {
+          await clerkUser.update({
+            unsafeMetadata: {
+              ...clerkUser.unsafeMetadata,
+              role: updatedData.role
+            }
+          });
+        }
       }
 
       const res = await api.put('/user/update-profile', updatedData);
@@ -124,6 +167,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Merge Clerk and MongoDB fields
+  const effectiveRole =
+    dbUser?.role ||
+    clerkUser?.unsafeMetadata?.role ||
+    clerkUser?.publicMetadata?.role ||
+    localStorage.getItem('clerk_selected_role') ||
+    'job_seeker';
+
   const mergedUser = isSignedIn && clerkUser ? {
     ...dbUser,
     _id: dbUser?._id,
@@ -132,7 +182,7 @@ export const AuthProvider = ({ children }) => {
     email: clerkUser.primaryEmailAddress?.emailAddress || dbUser?.email,
     fullName: dbUser?.fullName || clerkUser.fullName || 'Job Connect User',
     avatar: dbUser?.avatar || clerkUser.imageUrl,
-    role: dbUser?.role || clerkUser.unsafeMetadata?.role || 'job_seeker',
+    role: effectiveRole,
     resume: dbUser?.resume || '',
     summary: dbUser?.summary || '',
     phoneNumber: dbUser?.phoneNumber || ''
@@ -151,6 +201,7 @@ export const AuthProvider = ({ children }) => {
         isRecruiter: mergedUser?.role === 'recruiter',
         isJobSeeker: mergedUser?.role === 'job_seeker',
         logout,
+        switchRole,
         updateUserProfile,
         refreshUser
       }}
