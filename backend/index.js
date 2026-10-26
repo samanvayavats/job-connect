@@ -21,14 +21,28 @@ const allowedOrigins = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:3000',
-    'http://127.0.0.1:3000'
+    'http://127.0.0.1:3000',
+    'https://job-connect-omega-three.vercel.app'
 ];
 
 app.use(
     cors({
         origin: function (origin, callback) {
-            if (!origin || allowedOrigins.includes(origin)) {
-                return callback(null, true);
+            // Allow requests with no origin (e.g. mobile apps, curl, postman)
+            if (!origin) return callback(null, true);
+
+            try {
+                const hostname = new URL(origin).hostname;
+                if (
+                    allowedOrigins.includes(origin) ||
+                    hostname.endsWith('vercel.app') ||
+                    hostname === 'localhost' ||
+                    hostname === '127.0.0.1'
+                ) {
+                    return callback(null, true);
+                }
+            } catch (e) {
+                // Ignore URL parsing errors
             }
             return callback(null, true);
         },
