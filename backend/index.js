@@ -89,11 +89,23 @@ if (!fs.existsSync(publicPath)) {
 
 // Health Check
 app.get('/api/health', (req, res) => {
+    const cloudName = process.env.cloudinary_cloud_name || process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.cloudinary_API_key || process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.cloudinary_API_secret || process.env.CLOUDINARY_API_SECRET;
+    const cloudinaryUrl = process.env.CLOUDINARY_URL;
+
     res.status(200).json({
         status: 'healthy',
         project: 'Job Connect API (Clerk Auth)',
-        build: 'v1.1.0-memory-storage',
-        storage: 'memoryStorage'
+        build: 'v1.2.0-memory-storage',
+        storage: 'memoryStorage',
+        cloudinary: {
+            configured: Boolean(cloudinaryUrl || (cloudName && apiKey && apiSecret)),
+            hasCloudName: Boolean(cloudName),
+            hasApiKey: Boolean(apiKey),
+            hasApiSecret: Boolean(apiSecret),
+            hasCloudinaryUrl: Boolean(cloudinaryUrl)
+        }
     });
 });
 

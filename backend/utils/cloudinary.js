@@ -1,20 +1,32 @@
 import { v2 as cloudinary } from 'cloudinary';
 
-const uploadFileOnCloudinary = async (filePath, publicId, resourceType = 'auto') => {
+const initCloudinary = () => {
+    const cloudinaryUrl = process.env.CLOUDINARY_URL;
     const cloudName = process.env.cloudinary_cloud_name || process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.cloudinary_API_key || process.env.CLOUDINARY_API_KEY;
     const apiSecret = process.env.cloudinary_API_secret || process.env.CLOUDINARY_API_SECRET;
 
-    if (!cloudName || !apiKey || !apiSecret) {
-        console.warn('Cloudinary credentials missing in environment variables. Falling back to local/inline storage.');
-        return null;
+    if (!cloudinaryUrl && (!cloudName || !apiKey || !apiSecret)) {
+        return false;
     }
 
-    cloudinary.config({
-        cloud_name: cloudName,
-        api_key: apiKey,
-        api_secret: apiSecret
-    });
+    if (cloudinaryUrl) {
+        cloudinary.config({ cloudinary_url: cloudinaryUrl });
+    } else {
+        cloudinary.config({
+            cloud_name: cloudName,
+            api_key: apiKey,
+            api_secret: apiSecret
+        });
+    }
+    return true;
+};
+
+const uploadFileOnCloudinary = async (filePath, publicId, resourceType = 'auto') => {
+    if (!initCloudinary()) {
+        console.warn('Cloudinary credentials missing in environment variables. Falling back to inline storage.');
+        return null;
+    }
 
     try {
         if (!filePath) return null;
@@ -35,17 +47,7 @@ const uploadFileOnCloudinary = async (filePath, publicId, resourceType = 'auto')
 };
 
 const deleteFromcloudinary = async (public_id, resource_type = 'auto') => {
-    const cloudName = process.env.cloudinary_cloud_name || process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.cloudinary_API_key || process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.cloudinary_API_secret || process.env.CLOUDINARY_API_SECRET;
-
-    if (!cloudName || !apiKey || !apiSecret) return;
-
-    cloudinary.config({
-        cloud_name: cloudName,
-        api_key: apiKey,
-        api_secret: apiSecret
-    });
+    if (!initCloudinary()) return;
 
     try {
         await cloudinary.uploader.destroy(public_id, {
